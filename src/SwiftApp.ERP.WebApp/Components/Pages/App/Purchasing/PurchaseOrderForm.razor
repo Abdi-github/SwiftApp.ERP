@@ -1,0 +1,209 @@
+@page "/app/purchasing/orders/new"
+@page "/app/purchasing/orders/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Purchasing.Application.DTOs
+@using SwiftApp.ERP.Modules.Purchasing.Application.Services
+@using SwiftApp.ERP.Modules.MasterData.Application.DTOs
+@using SwiftApp.ERP.Modules.MasterData.Application.Services
+@using SwiftApp.ERP.SharedKernel.Domain
+@attribute [Authorize(Policy = "PURCHASING:CREATE")]
+@rendermode InteractiveServer
+@inject PurchaseOrderService OrderService
+@inject SupplierService SupplierService
+@inject MaterialService MaterialService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit Purchase Order" : "New Purchase Order") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-bag me-2"></i>@(_isEdit ? "Edit Purchase Order" : "New Purchase Order")</h2>
+    <a href="/app/purchasing/orders" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Orders
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="purchaseOrderForm">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Supplier <span class="text-danger">*</span></label>
+                    <InputSelect class="form-select" @bind-Value="_model.SupplierId">
+                        <option value="">— Select Supplier —</option>
+                        @foreach (var s in _suppliers)
+                        {
+                            <option value="@s.Id">@s.DisplayName</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Order Date</label>
+                    <InputDate class="form-control" @bind-Value="_model.OrderDate" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Expected Delivery Date</label>
+                    <InputDate class="form-control" @bind-Value="_model.ExpectedDeliveryDate" />
+                </div>
+            </div>
+
+            <h5 class="mb-3 mt-2">Order Lines</h5>
+            <div class="table-responsive mb-3">
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Material</th>
+                            <th style="width:120px">Quantity</th>
+                            <th style="width:140px">Unit Price (CHF)</th>
+                            <th style="width:120px">Discount %</th>
+                            <th style="width:130px">VAT Rate</th>
+                            <th style="width:60px"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < _model.Lines.Count; i++)
+                        {
+                            var idx = i;
+                            <tr>
+                                <td>
+                                    <InputSelect class="form-select form-select-sm" @bind-Value="_model.Lines[idx].MaterialId">
+                                        <option value="">— Select —</option>
+                                        @foreach (var m in _materials)
+                                        {
+                                            <option value="@m.Id">@m.Sku — @m.Name</option>
+                                        }
+                                    </InputSelect>
+                                </td>
+                                <td><InputNumber class="form-control form-control-sm" @bind-Value="_model.Lines[idx].Quantity" /></td>
+                                <td><InputNumber class="form-control form-control-sm" @bind-Value="_model.Lines[idx].UnitPrice" /></td>
+                                <td><InputNumber class="form-control form-control-sm" @bind-Value="_model.Lines[idx].DiscountPct" /></td>
+                                <td>
+                                    <InputSelect class="form-select form-select-sm" @bind-Value="_model.Lines[idx].VatRate">
+                                        @foreach (var v in Enum.GetValues<VatRate>())
+                                        {
+                                            <option value="@v">@v</option>
+                                        }
+                                    </InputSelect>
+                                </td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveLine(idx)">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-primary mb-3" @onclick="AddLine">
+                <i class="bi bi-plus-lg me-1"></i>Add Line
+            </button>
+
+            <div class="mb-3">
+                <label class="form-label">Notes</label>
+                <InputTextArea class="form-control" rows="2" @bind-Value="_model.Notes" />
+            </div>
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/purchasing/orders" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private PurchaseOrderFormModel _model = new();
+    private List<SupplierResponse> _suppliers = [];
+    private List<MaterialResponse> _materials = [];
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var supplierResult = await SupplierService.GetPagedAsync(1, 500);
+        _suppliers = supplierResult.Items.ToList();
+        var materialResult = await MaterialService.GetPagedAsync(1, 500);
+        _materials = materialResult.Items.ToList();
+
+        if (_isEdit)
+        {
+            var order = await OrderService.GetByIdAsync(Id!.Value);
+            if (order is null) { Navigation.NavigateTo("/app/purchasing/orders"); return; }
+            _model = new PurchaseOrderFormModel
+            {
+                SupplierId = order.SupplierId.ToString(),
+                OrderDate = order.OrderDate,
+                ExpectedDeliveryDate = order.ExpectedDeliveryDate,
+                Notes = order.Notes,
+                Lines = order.Lines.Select(l => new POLineModel
+                {
+                    MaterialId = l.MaterialId.ToString(),
+                    Quantity = l.Quantity,
+                    UnitPrice = l.UnitPrice,
+                    DiscountPct = l.DiscountPct,
+                    VatRate = Enum.TryParse<VatRate>(l.VatRate, out var vr) ? vr : VatRate.Standard,
+                }).ToList(),
+            };
+        }
+    }
+
+    private void AddLine() => _model.Lines.Add(new POLineModel());
+    private void RemoveLine(int idx) { if (_model.Lines.Count > 0) _model.Lines.RemoveAt(idx); }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            if (!Guid.TryParse(_model.SupplierId, out var supplierId))
+                throw new InvalidOperationException("Please select a supplier.");
+
+            var lines = _model.Lines.Where(l => Guid.TryParse(l.MaterialId, out _)).Select((l, i) => new PurchaseOrderLineRequest(
+                Guid.Parse(l.MaterialId), null, l.Quantity, l.UnitPrice, l.DiscountPct,
+                l.VatRate.ToString(), i + 1
+            )).ToList();
+
+            var request = new PurchaseOrderRequest(
+                supplierId, _model.OrderDate, _model.ExpectedDeliveryDate, _model.Notes, lines);
+
+            if (_isEdit) await OrderService.UpdateAsync(Id!.Value, request);
+            else await OrderService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/purchasing/orders");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class PurchaseOrderFormModel
+    {
+        public string SupplierId { get; set; } = "";
+        public DateOnly OrderDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+        public DateOnly? ExpectedDeliveryDate { get; set; }
+        public string? Notes { get; set; }
+        public List<POLineModel> Lines { get; set; } = [new()];
+    }
+
+    private class POLineModel
+    {
+        public string MaterialId { get; set; } = "";
+        public decimal Quantity { get; set; } = 1;
+        public decimal UnitPrice { get; set; }
+        public decimal DiscountPct { get; set; }
+        public VatRate VatRate { get; set; } = VatRate.Standard;
+    }
+}

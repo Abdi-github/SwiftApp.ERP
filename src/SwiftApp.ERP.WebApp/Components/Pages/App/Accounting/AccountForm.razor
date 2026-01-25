@@ -1,0 +1,140 @@
+@page "/app/accounting/accounts/new"
+@page "/app/accounting/accounts/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Accounting.Application.DTOs
+@using SwiftApp.ERP.Modules.Accounting.Application.Services
+@using SwiftApp.ERP.Modules.Accounting.Domain.Enums
+@attribute [Authorize(Policy = "ACCOUNTING:CREATE")]
+@rendermode InteractiveServer
+@inject AccountService AccountService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit Account" : "New Account") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-journal-text me-2"></i>@(_isEdit ? "Edit Account" : "New Account")</h2>
+    <a href="/app/accounting/accounts" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Accounts
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="accountForm">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Account Number <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.AccountNumber" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Name <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.Name" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Account Type <span class="text-danger">*</span></label>
+                    <InputSelect class="form-select" @bind-Value="_model.AccountType">
+                        @foreach (var t in Enum.GetValues<AccountType>())
+                        {
+                            <option value="@t">@t</option>
+                        }
+                    </InputSelect>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-8 mb-3">
+                    <label class="form-label">Description</label>
+                    <InputTextArea class="form-control" rows="2" @bind-Value="_model.Description" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Parent Account</label>
+                    <InputSelect class="form-select" @bind-Value="_model.ParentId">
+                        <option value="">— None —</option>
+                        @foreach (var a in _accounts.Where(a => !_isEdit || a.Id != Id!.Value))
+                        {
+                            <option value="@a.Id">@a.AccountNumber — @a.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+            </div>
+            <div class="mb-3">
+                <div class="form-check">
+                    <InputCheckbox class="form-check-input" @bind-Value="_model.Active" />
+                    <label class="form-check-label">Active</label>
+                </div>
+            </div>
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/accounting/accounts" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private AccountFormModel _model = new();
+    private List<AccountResponse> _accounts = [];
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await AccountService.GetPagedAsync(1, 500);
+        _accounts = result.Items.ToList();
+
+        if (_isEdit)
+        {
+            var a = await AccountService.GetByIdAsync(Id!.Value);
+            if (a is null) { Navigation.NavigateTo("/app/accounting/accounts"); return; }
+            _model = new AccountFormModel
+            {
+                AccountNumber = a.AccountNumber, Name = a.Name, Description = a.Description,
+                AccountType = Enum.TryParse<AccountType>(a.AccountType, out var at) ? at : AccountType.Asset,
+                ParentId = a.ParentId?.ToString() ?? "", Active = a.Active,
+            };
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            Guid? parentId = Guid.TryParse(_model.ParentId, out var pid) ? pid : null;
+            var request = new AccountRequest(
+                _model.AccountNumber, _model.Name, _model.Description,
+                _model.AccountType.ToString(), parentId, _model.Active);
+
+            if (_isEdit) await AccountService.UpdateAsync(Id!.Value, request);
+            else await AccountService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/accounting/accounts");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class AccountFormModel
+    {
+        public string AccountNumber { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public AccountType AccountType { get; set; } = AccountType.Asset;
+        public string ParentId { get; set; } = "";
+        public bool Active { get; set; } = true;
+    }
+}

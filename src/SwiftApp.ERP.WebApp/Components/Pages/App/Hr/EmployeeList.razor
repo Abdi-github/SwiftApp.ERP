@@ -1,0 +1,152 @@
+@page "/app/hr/employees"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Hr.Application.DTOs
+@using SwiftApp.ERP.Modules.Hr.Application.Services
+@using SwiftApp.ERP.SharedKernel.Domain
+@attribute [Authorize(Policy = "HR:VIEW")]
+@rendermode InteractiveServer
+@inject EmployeeService EmployeeService
+
+<PageTitle>Employees — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-people me-2"></i>Employees</h2>
+    <AuthorizeView Policy="HR:CREATE">
+        <a href="/app/hr/employees/new" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>New Employee
+        </a>
+    </AuthorizeView>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" placeholder="Search employees..." @bind="_search" @bind:event="oninput" @bind:after="SearchChanged" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" @bind="_statusFilter" @bind:after="OnFilterChanged">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+        </div>
+
+        @if (_loading)
+        {
+            <div class="text-center p-4"><div class="spinner-border text-primary" role="status"></div></div>
+        }
+        else if (_result is null || _result.Items.Count == 0)
+        {
+            <div class="alert alert-info">No employees found.</div>
+        }
+        else
+        {
+            <small class="text-muted d-block mb-2">Showing @((_page - 1) * PageSize + 1)–@(Math.Min(_page * PageSize, _result.TotalItems)) of @_result.TotalItems records</small>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th role="button" @onclick='() => ToggleSort("EmployeeNumber")'>Employee # @SortIcon("EmployeeNumber")</th>
+                            <th role="button" @onclick='() => ToggleSort("DisplayName")'>Name @SortIcon("DisplayName")</th>
+                            <th role="button" @onclick='() => ToggleSort("DepartmentName")'>Department @SortIcon("DepartmentName")</th>
+                            <th role="button" @onclick='() => ToggleSort("Position")'>Position @SortIcon("Position")</th>
+                            <th>Email</th>
+                            <th role="button" @onclick='() => ToggleSort("HireDate")'>Hire Date @SortIcon("HireDate")</th>
+                            <th role="button" @onclick='() => ToggleSort("Active")'>Active @SortIcon("Active")</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var emp in _sorted)
+                        {
+                            <tr>
+                                <td><code>@emp.EmployeeNumber</code></td>
+                                <td>@emp.DisplayName</td>
+                                <td>@emp.DepartmentName</td>
+                                <td>@emp.Position</td>
+                                <td>@emp.Email</td>
+                                <td>@emp.HireDate.ToString("dd.MM.yyyy")</td>
+                                <td><span class="badge @(emp.Active ? "bg-success" : "bg-secondary")">@(emp.Active ? "Active" : "Inactive")</span></td>
+                                <td class="text-end">
+                                    <AuthorizeView Policy="HR:EDIT">
+                                        <a href="/app/hr/employees/edit/@emp.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                                    </AuthorizeView>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (_result.TotalPages > 1)
+            {
+                <nav>
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item @(_page <= 1 ? "disabled" : "")"><button class="page-link" @onclick="() => GoToPage(_page - 1)">Previous</button></li>
+                        @for (int i = 1; i <= _result.TotalPages; i++) { var pg = i; <li class="page-item @(pg == _page ? "active" : "")"><button class="page-link" @onclick="() => GoToPage(pg)">@pg</button></li> }
+                        <li class="page-item @(_page >= _result.TotalPages ? "disabled" : "")"><button class="page-link" @onclick="() => GoToPage(_page + 1)">Next</button></li>
+                    </ul>
+                </nav>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private PagedResult<EmployeeResponse>? _result;
+    private List<EmployeeResponse> _sorted = [];
+    private string? _search;
+    private string _statusFilter = "";
+    private string _sortCol = "EmployeeNumber";
+    private bool _sortAsc = true;
+    private int _page = 1;
+    private const int PageSize = 20;
+    private bool _loading = true;
+    private System.Timers.Timer? _debounceTimer;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true; StateHasChanged();
+        _result = await EmployeeService.GetPagedAsync(_page, PageSize, _search);
+        ApplyClientSort(); _loading = false;
+    }
+
+    private void ApplyClientSort()
+    {
+        if (_result is null) { _sorted = []; return; }
+        IEnumerable<EmployeeResponse> items = _result.Items;
+        if (_statusFilter == "active") items = items.Where(e => e.Active);
+        else if (_statusFilter == "inactive") items = items.Where(e => !e.Active);
+        _sorted = (_sortCol switch
+        {
+            "EmployeeNumber" => _sortAsc ? items.OrderBy(e => e.EmployeeNumber) : items.OrderByDescending(e => e.EmployeeNumber),
+            "DisplayName" => _sortAsc ? items.OrderBy(e => e.DisplayName) : items.OrderByDescending(e => e.DisplayName),
+            "DepartmentName" => _sortAsc ? items.OrderBy(e => e.DepartmentName) : items.OrderByDescending(e => e.DepartmentName),
+            "Position" => _sortAsc ? items.OrderBy(e => e.Position) : items.OrderByDescending(e => e.Position),
+            "HireDate" => _sortAsc ? items.OrderBy(e => e.HireDate) : items.OrderByDescending(e => e.HireDate),
+            "Active" => _sortAsc ? items.OrderBy(e => e.Active) : items.OrderByDescending(e => e.Active),
+            _ => items
+        }).ToList();
+    }
+
+    private void ToggleSort(string col) { if (_sortCol == col) _sortAsc = !_sortAsc; else { _sortCol = col; _sortAsc = true; } ApplyClientSort(); }
+    private MarkupString SortIcon(string col) => new(_sortCol != col ? "<i class=\"bi bi-arrow-down-up text-muted small\"></i>" : _sortAsc ? "<i class=\"bi bi-sort-up\"></i>" : "<i class=\"bi bi-sort-down\"></i>");
+    private async Task OnFilterChanged() { _page = 1; await LoadData(); }
+
+    private void SearchChanged()
+    {
+        _debounceTimer?.Stop(); _debounceTimer?.Dispose();
+        _debounceTimer = new System.Timers.Timer(300);
+        _debounceTimer.Elapsed += async (_, _) => { _debounceTimer?.Stop(); _page = 1; await InvokeAsync(async () => { await LoadData(); StateHasChanged(); }); };
+        _debounceTimer.AutoReset = false; _debounceTimer.Start();
+    }
+
+    private async Task GoToPage(int page) { if (page < 1 || (_result is not null && page > _result.TotalPages)) return; _page = page; await LoadData(); }
+}

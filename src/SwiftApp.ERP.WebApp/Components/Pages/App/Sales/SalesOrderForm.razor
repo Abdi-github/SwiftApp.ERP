@@ -1,0 +1,246 @@
+@page "/app/sales/orders/new"
+@page "/app/sales/orders/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Sales.Application.DTOs
+@using SwiftApp.ERP.Modules.Sales.Application.Services
+@using SwiftApp.ERP.Modules.MasterData.Application.DTOs
+@using SwiftApp.ERP.Modules.MasterData.Application.Services
+@using SwiftApp.ERP.SharedKernel.Domain
+@attribute [Authorize(Policy = "SALES:CREATE")]
+@rendermode InteractiveServer
+@inject SalesOrderService OrderService
+@inject CustomerService CustomerService
+@inject ProductService ProductService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit Sales Order" : "New Sales Order") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-receipt me-2"></i>@(_isEdit ? "Edit Sales Order" : "New Sales Order")</h2>
+    <a href="/app/sales/orders" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Orders
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="salesOrderForm">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Customer <span class="text-danger">*</span></label>
+                    <InputSelect class="form-select" @bind-Value="_model.CustomerId">
+                        <option value="">— Select Customer —</option>
+                        @foreach (var c in _customers)
+                        {
+                            <option value="@c.Id">@c.DisplayName</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Order Date</label>
+                    <InputDate class="form-control" @bind-Value="_model.OrderDate" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Delivery Date</label>
+                    <InputDate class="form-control" @bind-Value="_model.DeliveryDate" />
+                </div>
+            </div>
+
+            <h5 class="mb-3 mt-2">Shipping Address</h5>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Street</label>
+                    <InputText class="form-control" @bind-Value="_model.ShippingStreet" />
+                </div>
+                <div class="col-md-2 mb-3">
+                    <label class="form-label">Postal Code</label>
+                    <InputText class="form-control" @bind-Value="_model.ShippingPostalCode" />
+                </div>
+                <div class="col-md-2 mb-3">
+                    <label class="form-label">City</label>
+                    <InputText class="form-control" @bind-Value="_model.ShippingCity" />
+                </div>
+                <div class="col-md-2 mb-3">
+                    <label class="form-label">Canton</label>
+                    <InputText class="form-control" @bind-Value="_model.ShippingCanton" />
+                </div>
+                <div class="col-md-2 mb-3">
+                    <label class="form-label">Country</label>
+                    <InputText class="form-control" @bind-Value="_model.ShippingCountry" />
+                </div>
+            </div>
+
+            <h5 class="mb-3 mt-2">Order Lines</h5>
+            <div class="table-responsive mb-3">
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Product</th>
+                            <th style="width:120px">Quantity</th>
+                            <th style="width:140px">Unit Price (CHF)</th>
+                            <th style="width:120px">Discount %</th>
+                            <th style="width:130px">VAT Rate</th>
+                            <th style="width:60px"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < _model.Lines.Count; i++)
+                        {
+                            var idx = i;
+                            <tr>
+                                <td>
+                                    <InputSelect class="form-select form-select-sm" @bind-Value="_model.Lines[idx].ProductId">
+                                        <option value="">— Select —</option>
+                                        @foreach (var p in _products)
+                                        {
+                                            <option value="@p.Id">@p.Sku — @p.Name</option>
+                                        }
+                                    </InputSelect>
+                                </td>
+                                <td><InputNumber class="form-control form-control-sm" @bind-Value="_model.Lines[idx].Quantity" /></td>
+                                <td><InputNumber class="form-control form-control-sm" @bind-Value="_model.Lines[idx].UnitPrice" /></td>
+                                <td><InputNumber class="form-control form-control-sm" @bind-Value="_model.Lines[idx].DiscountPct" /></td>
+                                <td>
+                                    <InputSelect class="form-select form-select-sm" @bind-Value="_model.Lines[idx].VatRate">
+                                        @foreach (var v in Enum.GetValues<VatRate>())
+                                        {
+                                            <option value="@v">@v</option>
+                                        }
+                                    </InputSelect>
+                                </td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveLine(idx)">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-primary mb-3" @onclick="AddLine">
+                <i class="bi bi-plus-lg me-1"></i>Add Line
+            </button>
+
+            <div class="mb-3">
+                <label class="form-label">Notes</label>
+                <InputTextArea class="form-control" rows="2" @bind-Value="_model.Notes" />
+            </div>
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/sales/orders" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private SalesOrderFormModel _model = new();
+    private List<CustomerResponse> _customerList = [];
+    private List<CustomerResponse> _customers => _customerList;
+    private List<ProductResponse> _products = [];
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var customerResult = await CustomerService.GetPagedAsync(1, 500);
+        _customerList = customerResult.Items.ToList();
+        var productResult = await ProductService.GetPagedAsync(1, 500);
+        _products = productResult.Items.ToList();
+
+        if (_isEdit)
+        {
+            var order = await OrderService.GetByIdAsync(Id!.Value);
+            if (order is null) { Navigation.NavigateTo("/app/sales/orders"); return; }
+            _model = new SalesOrderFormModel
+            {
+                CustomerId = order.CustomerId.ToString(),
+                OrderDate = order.OrderDate,
+                DeliveryDate = order.DeliveryDate,
+                Notes = order.Notes,
+                ShippingStreet = order.ShippingStreet,
+                ShippingCity = order.ShippingCity,
+                ShippingPostalCode = order.ShippingPostalCode,
+                ShippingCanton = order.ShippingCanton,
+                ShippingCountry = order.ShippingCountry,
+                Lines = order.Lines.Select(l => new LineModel
+                {
+                    ProductId = l.ProductId.ToString(),
+                    Quantity = l.Quantity,
+                    UnitPrice = l.UnitPrice,
+                    DiscountPct = l.DiscountPct,
+                    VatRate = Enum.TryParse<VatRate>(l.VatRate, out var vr) ? vr : VatRate.Standard,
+                }).ToList(),
+            };
+        }
+    }
+
+    private void AddLine() => _model.Lines.Add(new LineModel());
+    private void RemoveLine(int idx) { if (_model.Lines.Count > 0) _model.Lines.RemoveAt(idx); }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            if (!Guid.TryParse(_model.CustomerId, out var customerId))
+                throw new InvalidOperationException("Please select a customer.");
+
+            var lines = _model.Lines.Where(l => Guid.TryParse(l.ProductId, out _)).Select((l, i) => new SalesOrderLineRequest(
+                Guid.Parse(l.ProductId), null, l.Quantity, l.UnitPrice, l.DiscountPct,
+                l.VatRate.ToString(), i + 1
+            )).ToList();
+
+            var request = new SalesOrderRequest(
+                customerId, _model.OrderDate, _model.DeliveryDate, _model.Notes,
+                _model.ShippingStreet, _model.ShippingCity, _model.ShippingPostalCode,
+                _model.ShippingCanton, _model.ShippingCountry, lines);
+
+            if (_isEdit) await OrderService.UpdateAsync(Id!.Value, request);
+            else await OrderService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/sales/orders");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class SalesOrderFormModel
+    {
+        public string CustomerId { get; set; } = "";
+        public DateOnly OrderDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+        public DateOnly? DeliveryDate { get; set; }
+        public string? Notes { get; set; }
+        public string? ShippingStreet { get; set; }
+        public string? ShippingCity { get; set; }
+        public string? ShippingPostalCode { get; set; }
+        public string? ShippingCanton { get; set; }
+        public string? ShippingCountry { get; set; } = "CH";
+        public List<LineModel> Lines { get; set; } = [new()];
+    }
+
+    private class LineModel
+    {
+        public string ProductId { get; set; } = "";
+        public decimal Quantity { get; set; } = 1;
+        public decimal UnitPrice { get; set; }
+        public decimal DiscountPct { get; set; }
+        public VatRate VatRate { get; set; } = VatRate.Standard;
+    }
+}

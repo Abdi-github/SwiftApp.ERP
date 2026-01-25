@@ -1,0 +1,274 @@
+@inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+
+<AuthorizeView>
+    <Authorized>
+        <div class="d-flex" style="min-height: 100vh;">
+            @* Sidebar *@
+            <nav class="d-flex flex-column text-white p-3" style="width: 260px; background-color: #1a1f3d;">
+                <a class="text-decoration-none mb-4" href="/app/dashboard">
+                    <h4 class="text-warning mb-0">
+                        <i class="bi bi-watch"></i> SwiftApp ERP
+                    </h4>
+                </a>
+
+                <ul class="nav nav-pills flex-column">
+                    @if (HasPermission("DASHBOARD:VIEW"))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/dashboard">
+                                <i class="bi bi-speedometer2 me-2"></i>Dashboard
+                            </a>
+                        </li>
+                    }
+
+                    @if (HasPermission("MASTERDATA:VIEW"))
+                    {
+                        <li class="nav-item mt-2">
+                            <small class="text-secondary text-uppercase px-3">Master Data</small>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/masterdata/products">
+                                <i class="bi bi-watch me-2"></i>Products
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/masterdata/materials">
+                                <i class="bi bi-gem me-2"></i>Materials
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/masterdata/categories">
+                                <i class="bi bi-tags me-2"></i>Categories
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/masterdata/units-of-measure">
+                                <i class="bi bi-rulers me-2"></i>Units of Measure
+                            </a>
+                        </li>
+                    }
+
+                    @if (HasAnyPermission("INVENTORY:VIEW", "SALES:VIEW", "PURCHASING:VIEW", "PRODUCTION:VIEW"))
+                    {
+                        <li class="nav-item mt-2">
+                            <small class="text-secondary text-uppercase px-3">Operations</small>
+                        </li>
+                    }
+                    @if (HasPermission("INVENTORY:VIEW"))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/inventory/stock">
+                                <i class="bi bi-box-seam me-2"></i>Stock Levels
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/inventory/warehouses">
+                                <i class="bi bi-building me-2"></i>Warehouses
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/inventory/stock-movements">
+                                <i class="bi bi-arrow-left-right me-2"></i>Stock Movements
+                            </a>
+                        </li>
+                    }
+                    @if (HasPermission("SALES:VIEW"))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/sales/orders">
+                                <i class="bi bi-cart me-2"></i>Sales Orders
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/sales/customers">
+                                <i class="bi bi-person-lines-fill me-2"></i>Customers
+                            </a>
+                        </li>
+                    }
+                    @if (HasPermission("PURCHASING:VIEW"))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/purchasing/orders">
+                                <i class="bi bi-truck me-2"></i>Purchase Orders
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/purchasing/suppliers">
+                                <i class="bi bi-shop me-2"></i>Suppliers
+                            </a>
+                        </li>
+                    }
+                    @if (HasPermission("PRODUCTION:VIEW"))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/production/orders">
+                                <i class="bi bi-gear me-2"></i>Production Orders
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/production/workcenters">
+                                <i class="bi bi-tools me-2"></i>Work Centers
+                            </a>
+                        </li>
+                    }
+
+                    @if (HasAnyPermission("ACCOUNTING:VIEW", "HR:VIEW", "CRM:VIEW"))
+                    {
+                        <li class="nav-item mt-2">
+                            <small class="text-secondary text-uppercase px-3">Finance &amp; HR</small>
+                        </li>
+                    }
+                    @if (HasPermission("ACCOUNTING:VIEW"))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/accounting/journal">
+                                <i class="bi bi-journal-text me-2"></i>Journal Entries
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/accounting/accounts">
+                                <i class="bi bi-calculator me-2"></i>Chart of Accounts
+                            </a>
+                        </li>
+                    }
+                    @if (HasPermission("HR:VIEW"))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/hr/employees">
+                                <i class="bi bi-people me-2"></i>Employees
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/hr/departments">
+                                <i class="bi bi-diagram-3 me-2"></i>Departments
+                            </a>
+                        </li>
+                    }
+                    @if (HasPermission("CRM:VIEW"))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/crm/contacts">
+                                <i class="bi bi-person-rolodex me-2"></i>Contacts
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/crm/interactions">
+                                <i class="bi bi-chat-dots me-2"></i>Interactions
+                            </a>
+                        </li>
+                    }
+                    @if (HasPermission("QC:VIEW"))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/qc/inspections">
+                                <i class="bi bi-clipboard-check me-2"></i>Quality
+                            </a>
+                        </li>
+                    }
+
+                    @if (HasPermission("ADMIN:USERS_VIEW"))
+                    {
+                        <li class="nav-item mt-2">
+                            <small class="text-secondary text-uppercase px-3">Administration</small>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/admin/users">
+                                <i class="bi bi-person-gear me-2"></i>Users
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/admin/roles">
+                                <i class="bi bi-shield-lock me-2"></i>Roles
+                            </a>
+                        </li>
+                    }
+
+                    <li class="nav-item mt-2">
+                        <small class="text-secondary text-uppercase px-3">Account</small>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-white" href="/app/notifications">
+                            <i class="bi bi-bell me-2"></i>Notifications
+                        </a>
+                    </li>
+                    @if (HasPermission("NOTIFICATION:MANAGE"))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="/app/notifications/campaigns">
+                                <i class="bi bi-megaphone me-2"></i>Mail Campaigns
+                            </a>
+                        </li>
+                    }
+                </ul>
+
+                <hr class="border-secondary" />
+
+                <div class="mt-auto small text-secondary">
+                    &copy; @DateTime.Now.Year SwiftApp ERP
+                </div>
+            </nav>
+
+            @* Main Content *@
+            <div class="flex-grow-1 d-flex flex-column">
+                <header class="bg-white border-bottom px-4 py-2 d-flex align-items-center justify-content-between">
+                    <h5 class="mb-0 text-muted">SwiftApp ERP</h5>
+                    <div class="d-flex align-items-center gap-3">
+                        <NotificationBell @rendermode="@(new InteractiveServerRenderMode(prerender: false))" />
+                        <span class="text-muted small">
+                            <i class="bi bi-person-circle me-1"></i>@context.User.Identity?.Name
+                        </span>
+                        <span class="badge bg-info">@GetPrimaryRole()</span>
+                        <a href="/logout" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-box-arrow-right"></i> Logout
+                        </a>
+                    </div>
+                </header>
+
+                <main class="p-4 flex-grow-1 bg-light">
+                    @Body
+                </main>
+            </div>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private ClaimsPrincipal? _user;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is not null)
+        {
+            var state = await AuthState;
+            _user = state.User;
+        }
+    }
+
+    private bool HasPermission(string permission)
+    {
+        if (_user is null) return false;
+        return _user.IsInRole("ADMIN") || _user.HasClaim("permission", permission);
+    }
+
+    private bool HasAnyPermission(params string[] permissions)
+    {
+        if (_user is null) return false;
+        if (_user.IsInRole("ADMIN")) return true;
+        return permissions.Any(p => _user.HasClaim("permission", p));
+    }
+
+    private string GetPrimaryRole()
+    {
+        if (_user is null) return "";
+        var roles = _user.Claims.Where(c => c.Type == ClaimTypes.Role).Select(c => c.Value).ToList();
+        return roles.FirstOrDefault() ?? "USER";
+    }
+}

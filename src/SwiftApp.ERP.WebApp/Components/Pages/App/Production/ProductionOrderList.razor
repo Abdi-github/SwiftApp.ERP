@@ -1,0 +1,200 @@
+@page "/app/production/orders"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Production.Application.DTOs
+@using SwiftApp.ERP.Modules.Production.Application.Services
+@using SwiftApp.ERP.SharedKernel.Domain
+@attribute [Authorize(Policy = "PRODUCTION:VIEW")]
+@rendermode InteractiveServer
+@inject ProductionOrderService ProductionOrderService
+
+<PageTitle>Production Orders — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-gear me-2"></i>Production Orders</h2>
+    <AuthorizeView Policy="PRODUCTION:CREATE">
+        <a href="/app/production/orders/new" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>New Order
+        </a>
+    </AuthorizeView>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" placeholder="Search orders..." @bind="_search" @bind:event="oninput" @bind:after="SearchChanged" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" @bind="_statusFilter" @bind:after="OnFilterChanged">
+                    <option value="">All Statuses</option>
+                    <option value="PLANNED">Planned</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="COMPLETED">Completed</option>
+                    <option value="CANCELLED">Cancelled</option>
+                </select>
+            </div>
+        </div>
+
+        @if (_loading)
+        {
+            <div class="text-center p-4"><div class="spinner-border text-primary" role="status"></div></div>
+        }
+        else if (_result is null || _displayItems.Count == 0)
+        {
+            <div class="alert alert-info">No production orders found.</div>
+        }
+        else
+        {
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <small class="text-muted">Showing @_displayItems.Count of @_result.TotalItems records</small>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th role="button" @onclick='() => Sort("OrderNumber")'>Order # @SortIcon("OrderNumber")</th>
+                            <th role="button" @onclick='() => Sort("WorkCenterName")'>Work Center @SortIcon("WorkCenterName")</th>
+                            <th role="button" @onclick='() => Sort("Status")'>Status @SortIcon("Status")</th>
+                            <th class="text-end" role="button" @onclick='() => Sort("PlannedQuantity")'>Planned Qty @SortIcon("PlannedQuantity")</th>
+                            <th class="text-end" role="button" @onclick='() => Sort("CompletedQuantity")'>Completed Qty @SortIcon("CompletedQuantity")</th>
+                            <th role="button" @onclick='() => Sort("PlannedStartDate")'>Planned Start @SortIcon("PlannedStartDate")</th>
+                            <th role="button" @onclick='() => Sort("PlannedEndDate")'>Planned End @SortIcon("PlannedEndDate")</th>
+                            <th class="text-end" role="button" @onclick='() => Sort("EstimatedCost")'>Est. Cost @SortIcon("EstimatedCost")</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var o in _displayItems)
+                        {
+                            <tr>
+                                <td><code>@o.OrderNumber</code></td>
+                                <td>@(o.WorkCenterName ?? "—")</td>
+                                <td><span class="badge @GetStatusBadge(o.Status)">@o.Status</span></td>
+                                <td class="text-end">@o.PlannedQuantity.ToString("N0")</td>
+                                <td class="text-end">@o.CompletedQuantity.ToString("N0")</td>
+                                <td>@o.PlannedStartDate.ToString("dd.MM.yyyy")</td>
+                                <td>@o.PlannedEndDate.ToString("dd.MM.yyyy")</td>
+                                <td class="text-end">CHF @o.EstimatedCost.ToString("N2")</td>
+                                <td class="text-end">
+                                    <AuthorizeView Policy="PRODUCTION:EDIT">
+                                        <a href="/app/production/orders/edit/@o.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                                    </AuthorizeView>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <nav>
+                <ul class="pagination justify-content-center">
+                    <li class="page-item @(_page <= 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => GoToPage(_page - 1)">Previous</button>
+                    </li>
+                    @for (int i = 1; i <= _result.TotalPages; i++)
+                    {
+                        var pg = i;
+                        <li class="page-item @(pg == _page ? "active" : "")">
+                            <button class="page-link" @onclick="() => GoToPage(pg)">@pg</button>
+                        </li>
+                    }
+                    <li class="page-item @(_page >= _result.TotalPages ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => GoToPage(_page + 1)">Next</button>
+                    </li>
+                </ul>
+            </nav>
+        }
+    </div>
+</div>
+
+@code {
+    private PagedResult<ProductionOrderResponse>? _result;
+    private List<ProductionOrderResponse> _displayItems = [];
+    private string? _search;
+    private string _statusFilter = "";
+    private string _sortColumn = "PlannedStartDate";
+    private bool _sortAsc = false;
+    private int _page = 1;
+    private const int PageSize = 20;
+    private bool _loading = true;
+    private System.Timers.Timer? _debounceTimer;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        StateHasChanged();
+        _result = await ProductionOrderService.GetPagedAsync(_page, PageSize, _search);
+        ApplyClientFilters();
+        _loading = false;
+    }
+
+    private void ApplyClientFilters()
+    {
+        if (_result is null) { _displayItems = []; return; }
+        IEnumerable<ProductionOrderResponse> items = _result.Items;
+        if (!string.IsNullOrWhiteSpace(_statusFilter))
+            items = items.Where(o => o.Status.Equals(_statusFilter, StringComparison.OrdinalIgnoreCase));
+        _displayItems = ApplySort(items).ToList();
+    }
+
+    private IEnumerable<ProductionOrderResponse> ApplySort(IEnumerable<ProductionOrderResponse> items) => _sortColumn switch
+    {
+        "OrderNumber" => _sortAsc ? items.OrderBy(o => o.OrderNumber) : items.OrderByDescending(o => o.OrderNumber),
+        "WorkCenterName" => _sortAsc ? items.OrderBy(o => o.WorkCenterName) : items.OrderByDescending(o => o.WorkCenterName),
+        "Status" => _sortAsc ? items.OrderBy(o => o.Status) : items.OrderByDescending(o => o.Status),
+        "PlannedQuantity" => _sortAsc ? items.OrderBy(o => o.PlannedQuantity) : items.OrderByDescending(o => o.PlannedQuantity),
+        "CompletedQuantity" => _sortAsc ? items.OrderBy(o => o.CompletedQuantity) : items.OrderByDescending(o => o.CompletedQuantity),
+        "PlannedStartDate" => _sortAsc ? items.OrderBy(o => o.PlannedStartDate) : items.OrderByDescending(o => o.PlannedStartDate),
+        "PlannedEndDate" => _sortAsc ? items.OrderBy(o => o.PlannedEndDate) : items.OrderByDescending(o => o.PlannedEndDate),
+        "EstimatedCost" => _sortAsc ? items.OrderBy(o => o.EstimatedCost) : items.OrderByDescending(o => o.EstimatedCost),
+        _ => items
+    };
+
+    private void Sort(string column)
+    {
+        if (_sortColumn == column) _sortAsc = !_sortAsc;
+        else { _sortColumn = column; _sortAsc = true; }
+        ApplyClientFilters();
+    }
+
+    private MarkupString SortIcon(string column) =>
+        _sortColumn != column ? new("⇅") : new(_sortAsc ? "↑" : "↓");
+
+    private async Task OnFilterChanged() { _page = 1; await LoadData(); }
+
+    private void SearchChanged()
+    {
+        _debounceTimer?.Stop();
+        _debounceTimer?.Dispose();
+        _debounceTimer = new System.Timers.Timer(300);
+        _debounceTimer.Elapsed += async (_, _) =>
+        {
+            _debounceTimer?.Stop();
+            _page = 1;
+            await InvokeAsync(async () => { await LoadData(); StateHasChanged(); });
+        };
+        _debounceTimer.AutoReset = false;
+        _debounceTimer.Start();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page < 1 || (_result is not null && page > _result.TotalPages)) return;
+        _page = page;
+        await LoadData();
+    }
+
+    private static string GetStatusBadge(string status) => status switch
+    {
+        "PLANNED" => "bg-secondary",
+        "IN_PROGRESS" => "bg-primary",
+        "COMPLETED" => "bg-success",
+        "CANCELLED" => "bg-danger",
+        _ => "bg-info"
+    };
+}

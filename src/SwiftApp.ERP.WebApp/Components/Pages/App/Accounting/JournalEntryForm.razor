@@ -1,0 +1,210 @@
+@page "/app/accounting/journal/new"
+@page "/app/accounting/journal/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Accounting.Application.DTOs
+@using SwiftApp.ERP.Modules.Accounting.Application.Services
+@attribute [Authorize(Policy = "ACCOUNTING:CREATE")]
+@rendermode InteractiveServer
+@inject JournalEntryService JournalEntryService
+@inject AccountService AccountService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit Journal Entry" : "New Journal Entry") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-journal-text me-2"></i>@(_isEdit ? "Edit Journal Entry" : "New Journal Entry")</h2>
+    <a href="/app/accounting/journal" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Journal
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="journalEntryForm">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Entry Date <span class="text-danger">*</span></label>
+                    <InputDate class="form-control" @bind-Value="_model.EntryDate" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Reference</label>
+                    <InputText class="form-control" @bind-Value="_model.Reference" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Source Document Type</label>
+                    <InputText class="form-control" @bind-Value="_model.SourceDocumentType" />
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Description</label>
+                <InputTextArea class="form-control" rows="2" @bind-Value="_model.Description" />
+            </div>
+
+            <h5 class="mt-4 mb-3">Journal Lines</h5>
+            <div class="table-responsive">
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="min-width:250px">Account <span class="text-danger">*</span></th>
+                            <th>Description</th>
+                            <th style="width:150px">Debit (CHF)</th>
+                            <th style="width:150px">Credit (CHF)</th>
+                            <th style="width:60px"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < _model.Lines.Count; i++)
+                        {
+                            var idx = i;
+                            <tr>
+                                <td>
+                                    <InputSelect class="form-select form-select-sm" @bind-Value="_model.Lines[idx].AccountId">
+                                        <option value="">— Select Account —</option>
+                                        @foreach (var a in _accounts)
+                                        {
+                                            <option value="@a.Id">@a.AccountNumber — @a.Name</option>
+                                        }
+                                    </InputSelect>
+                                </td>
+                                <td>
+                                    <InputText class="form-control form-control-sm" @bind-Value="_model.Lines[idx].Description" />
+                                </td>
+                                <td>
+                                    <InputNumber class="form-control form-control-sm text-end" @bind-Value="_model.Lines[idx].Debit" />
+                                </td>
+                                <td>
+                                    <InputNumber class="form-control form-control-sm text-end" @bind-Value="_model.Lines[idx].Credit" />
+                                </td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveLine(idx)" disabled="@(_model.Lines.Count <= 2)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="fw-bold">
+                            <td colspan="2" class="text-end">Totals:</td>
+                            <td class="text-end">CHF @_model.Lines.Sum(l => l.Debit).ToString("N2")</td>
+                            <td class="text-end">CHF @_model.Lines.Sum(l => l.Credit).ToString("N2")</td>
+                            <td></td>
+                        </tr>
+                        @{ var diff = _model.Lines.Sum(l => l.Debit) - _model.Lines.Sum(l => l.Credit); }
+                        @if (diff != 0)
+                        {
+                            <tr>
+                                <td colspan="2" class="text-end text-danger">Difference:</td>
+                                <td colspan="2" class="text-danger text-end">CHF @diff.ToString("N2")</td>
+                                <td></td>
+                            </tr>
+                        }
+                    </tfoot>
+                </table>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary mb-3" @onclick="AddLine">
+                <i class="bi bi-plus-lg me-1"></i>Add Line
+            </button>
+
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/accounting/journal" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private JournalEntryFormModel _model = new();
+    private List<AccountResponse> _accounts = [];
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await AccountService.GetPagedAsync(1, 500);
+        _accounts = result.Items.ToList();
+
+        if (_isEdit)
+        {
+            var e = await JournalEntryService.GetByIdAsync(Id!.Value);
+            if (e is null) { Navigation.NavigateTo("/app/accounting/journal"); return; }
+            _model = new JournalEntryFormModel
+            {
+                EntryDate = e.EntryDate, Description = e.Description, Reference = e.Reference,
+                SourceDocumentType = e.SourceDocumentType,
+                Lines = e.Lines.Select(l => new LineModel
+                {
+                    AccountId = l.AccountId.ToString(), Description = l.Description,
+                    Debit = l.Debit, Credit = l.Credit
+                }).ToList()
+            };
+            if (_model.Lines.Count < 2) while (_model.Lines.Count < 2) _model.Lines.Add(new());
+        }
+        else
+        {
+            _model.Lines = [new(), new()];
+        }
+    }
+
+    private void AddLine() => _model.Lines.Add(new());
+    private void RemoveLine(int idx) { if (_model.Lines.Count > 2) _model.Lines.RemoveAt(idx); }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            var lines = _model.Lines
+                .Where(l => Guid.TryParse(l.AccountId, out _))
+                .Select((l, i) => new JournalEntryLineRequest(
+                    Guid.Parse(l.AccountId), l.Description, l.Debit, l.Credit, i))
+                .ToList();
+
+            if (lines.Count < 2) { _error = "At least 2 lines with valid accounts are required."; return; }
+
+            var request = new JournalEntryRequest(
+                _model.Description, _model.EntryDate, _model.Reference,
+                _model.SourceDocumentType, null, lines);
+
+            if (_isEdit) await JournalEntryService.UpdateAsync(Id!.Value, request);
+            else await JournalEntryService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/accounting/journal");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class JournalEntryFormModel
+    {
+        public DateOnly EntryDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow);
+        public string? Description { get; set; }
+        public string? Reference { get; set; }
+        public string? SourceDocumentType { get; set; }
+        public List<LineModel> Lines { get; set; } = [];
+    }
+
+    private class LineModel
+    {
+        public string AccountId { get; set; } = "";
+        public string? Description { get; set; }
+        public decimal Debit { get; set; }
+        public decimal Credit { get; set; }
+    }
+}

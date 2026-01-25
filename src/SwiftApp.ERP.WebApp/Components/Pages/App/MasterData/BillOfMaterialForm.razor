@@ -1,0 +1,169 @@
+@page "/app/masterdata/products/{ProductId:guid}/bom/new"
+@page "/app/masterdata/products/{ProductId:guid}/bom/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.MasterData.Application.DTOs
+@using SwiftApp.ERP.Modules.MasterData.Application.Services
+@attribute [Authorize(Policy = "MASTERDATA:CREATE")]
+@rendermode InteractiveServer
+@inject BillOfMaterialService BomService
+@inject MaterialService MaterialService
+@inject UnitOfMeasureService UomService
+@inject ProductService ProductService
+@inject NavigationManager Nav
+
+<PageTitle>@(_isEdit ? "Edit" : "Add") BOM Entry — SwiftApp ERP</PageTitle>
+
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/app/masterdata/products">Products</a></li>
+        <li class="breadcrumb-item"><a href="/app/masterdata/products/@ProductId/bom">Bill of Materials</a></li>
+        <li class="breadcrumb-item active">@(_isEdit ? "Edit" : "Add")</li>
+    </ol>
+</nav>
+
+<h2><i class="bi bi-diagram-3 me-2"></i>@(_isEdit ? "Edit" : "Add") BOM Entry</h2>
+@if (_productName is not null)
+{
+    <p class="text-muted">Product: <strong>@_productName</strong></p>
+}
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmitAsync" FormName="bomForm">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" />
+
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">Material <span class="text-danger">*</span></label>
+                    <select class="form-select" @bind="_materialId">
+                        <option value="">— Select material —</option>
+                        @foreach (var m in _materials)
+                        {
+                            <option value="@m.Id">@m.Sku — @m.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Quantity <span class="text-danger">*</span></label>
+                    <input type="number" step="0.01" min="0.01" class="form-control" @bind="_model.Quantity" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Position <span class="text-danger">*</span></label>
+                    <input type="number" min="1" class="form-control" @bind="_model.Position" />
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">Unit of Measure</label>
+                    <select class="form-select" @bind="_uomId">
+                        <option value="">— None —</option>
+                        @foreach (var u in _uoms)
+                        {
+                            <option value="@u.Id">@u.Code — @u.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Notes</label>
+                    <input type="text" class="form-control" @bind="_model.Notes" placeholder="Optional notes" />
+                </div>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Add")
+                </button>
+                <a href="/app/masterdata/products/@ProductId/bom" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid ProductId { get; set; }
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private bool _saving;
+    private string? _error;
+    private string? _productName;
+    private BomFormModel _model = new();
+    private string _materialId = "";
+    private string _uomId = "";
+    private List<MaterialResponse> _materials = [];
+    private List<UnitOfMeasureResponse> _uoms = [];
+
+    private class BomFormModel
+    {
+        public decimal Quantity { get; set; } = 1;
+        public int Position { get; set; } = 1;
+        public string? Notes { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var product = await ProductService.GetByIdAsync(ProductId);
+        _productName = product?.Name;
+
+        var materialsResult = await MaterialService.GetPagedAsync(1, 500);
+        _materials = materialsResult.Items.ToList();
+        _uoms = await UomService.GetAllAsync();
+
+        if (_isEdit)
+        {
+            var bom = await BomService.GetByIdAsync(Id!.Value);
+            if (bom is null)
+            {
+                Nav.NavigateTo($"/app/masterdata/products/{ProductId}/bom");
+                return;
+            }
+            _materialId = bom.MaterialId.ToString();
+            _uomId = bom.UnitOfMeasureId?.ToString() ?? "";
+            _model.Quantity = bom.Quantity;
+            _model.Position = bom.Position;
+            _model.Notes = bom.Notes;
+        }
+    }
+
+    private async Task HandleSubmitAsync()
+    {
+        if (!Guid.TryParse(_materialId, out var matId))
+        {
+            _error = "Please select a material.";
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            Guid? uomId = Guid.TryParse(_uomId, out var parsedUom) ? parsedUom : null;
+            var request = new BillOfMaterialRequest(matId, _model.Quantity, uomId, _model.Position, _model.Notes);
+
+            if (_isEdit)
+                await BomService.UpdateAsync(Id!.Value, request);
+            else
+                await BomService.CreateAsync(ProductId, request);
+
+            Nav.NavigateTo($"/app/masterdata/products/{ProductId}/bom");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

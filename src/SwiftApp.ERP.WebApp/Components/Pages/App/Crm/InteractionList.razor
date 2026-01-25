@@ -1,0 +1,120 @@
+@page "/app/crm/interactions"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Crm.Application.DTOs
+@using SwiftApp.ERP.Modules.Crm.Application.Services
+@using SwiftApp.ERP.SharedKernel.Domain
+@attribute [Authorize(Policy = "CRM:VIEW")]
+@rendermode InteractiveServer
+@inject InteractionService InteractionService
+
+<PageTitle>Interactions — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-chat-dots me-2"></i>Interactions</h2>
+    <AuthorizeView Policy="CRM:CREATE">
+        <a href="/app/crm/interactions/new" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>New Interaction
+        </a>
+    </AuthorizeView>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        @if (_loading)
+        {
+            <div class="text-center p-4"><div class="spinner-border text-primary" role="status"></div></div>
+        }
+        else if (_result is null || _result.Items.Count == 0)
+        {
+            <div class="alert alert-info">No interactions found.</div>
+        }
+        else
+        {
+            <small class="text-muted d-block mb-2">Showing @((_page - 1) * PageSize + 1)–@(Math.Min(_page * PageSize, _result.TotalItems)) of @_result.TotalItems records</small>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th role="button" @onclick='() => ToggleSort("Subject")'>Subject @SortIcon("Subject")</th>
+                            <th role="button" @onclick='() => ToggleSort("ContactName")'>Contact @SortIcon("ContactName")</th>
+                            <th role="button" @onclick='() => ToggleSort("InteractionType")'>Type @SortIcon("InteractionType")</th>
+                            <th role="button" @onclick='() => ToggleSort("InteractionDate")'>Date @SortIcon("InteractionDate")</th>
+                            <th>Follow-up</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var i in _sorted)
+                        {
+                            <tr>
+                                <td>@i.Subject</td>
+                                <td>@i.ContactName</td>
+                                <td><span class="badge bg-info text-dark">@i.InteractionType</span></td>
+                                <td>@i.InteractionDate.ToString("dd.MM.yyyy HH:mm")</td>
+                                <td>@(i.FollowUpDate?.ToString("dd.MM.yyyy") ?? "—")</td>
+                                <td>
+                                    @if (i.Completed) { <span class="badge bg-success">Completed</span> }
+                                    else { <span class="badge bg-warning text-dark">Open</span> }
+                                </td>
+                                <td class="text-end">
+                                    <AuthorizeView Policy="CRM:EDIT">
+                                        <a href="/app/crm/interactions/edit/@i.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                                    </AuthorizeView>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (_result.TotalPages > 1)
+            {
+                <nav>
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item @(_page <= 1 ? "disabled" : "")"><button class="page-link" @onclick="() => GoToPage(_page - 1)">Previous</button></li>
+                        @for (int p = 1; p <= _result.TotalPages; p++) { var pg = p; <li class="page-item @(pg == _page ? "active" : "")"><button class="page-link" @onclick="() => GoToPage(pg)">@pg</button></li> }
+                        <li class="page-item @(_page >= _result.TotalPages ? "disabled" : "")"><button class="page-link" @onclick="() => GoToPage(_page + 1)">Next</button></li>
+                    </ul>
+                </nav>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private PagedResult<InteractionResponse>? _result;
+    private List<InteractionResponse> _sorted = [];
+    private string _sortCol = "InteractionDate";
+    private bool _sortAsc;
+    private int _page = 1;
+    private const int PageSize = 20;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true; StateHasChanged();
+        _result = await InteractionService.GetPagedAsync(_page, PageSize);
+        ApplyClientSort(); _loading = false;
+    }
+
+    private void ApplyClientSort()
+    {
+        if (_result is null) { _sorted = []; return; }
+        _sorted = (_sortCol switch
+        {
+            "Subject" => _sortAsc ? _result.Items.OrderBy(i => i.Subject) : _result.Items.OrderByDescending(i => i.Subject),
+            "ContactName" => _sortAsc ? _result.Items.OrderBy(i => i.ContactName) : _result.Items.OrderByDescending(i => i.ContactName),
+            "InteractionType" => _sortAsc ? _result.Items.OrderBy(i => i.InteractionType) : _result.Items.OrderByDescending(i => i.InteractionType),
+            "InteractionDate" => _sortAsc ? _result.Items.OrderBy(i => i.InteractionDate) : _result.Items.OrderByDescending(i => i.InteractionDate),
+            _ => _result.Items.AsEnumerable()
+        }).ToList();
+    }
+
+    private void ToggleSort(string col) { if (_sortCol == col) _sortAsc = !_sortAsc; else { _sortCol = col; _sortAsc = true; } ApplyClientSort(); }
+    private MarkupString SortIcon(string col) => new(_sortCol != col ? "<i class=\"bi bi-arrow-down-up text-muted small\"></i>" : _sortAsc ? "<i class=\"bi bi-sort-up\"></i>" : "<i class=\"bi bi-sort-down\"></i>");
+
+    private async Task GoToPage(int page) { if (page < 1 || (_result is not null && page > _result.TotalPages)) return; _page = page; await LoadData(); }
+}

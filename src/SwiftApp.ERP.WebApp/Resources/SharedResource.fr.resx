@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" msdata:Ordinal="0" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+
+  <!-- Common Actions -->
+  <data name="common.create" xml:space="preserve"><value>Créer</value></data>
+  <data name="common.edit" xml:space="preserve"><value>Modifier</value></data>
+  <data name="common.delete" xml:space="preserve"><value>Supprimer</value></data>
+  <data name="common.save" xml:space="preserve"><value>Enregistrer</value></data>
+  <data name="common.cancel" xml:space="preserve"><value>Annuler</value></data>
+  <data name="common.search" xml:space="preserve"><value>Rechercher</value></data>
+  <data name="common.back" xml:space="preserve"><value>Retour</value></data>
+  <data name="common.yes" xml:space="preserve"><value>Oui</value></data>
+  <data name="common.no" xml:space="preserve"><value>Non</value></data>
+  <data name="common.loading" xml:space="preserve"><value>Chargement...</value></data>
+  <data name="common.noResults" xml:space="preserve"><value>Aucun résultat trouvé.</value></data>
+  <data name="common.active" xml:space="preserve"><value>Actif</value></data>
+  <data name="common.inactive" xml:space="preserve"><value>Inactif</value></data>
+  <data name="common.actions" xml:space="preserve"><value>Actions</value></data>
+  <data name="common.previous" xml:space="preserve"><value>Précédent</value></data>
+  <data name="common.next" xml:space="preserve"><value>Suivant</value></data>
+  <data name="common.status" xml:space="preserve"><value>Statut</value></data>
+  <data name="common.name" xml:space="preserve"><value>Nom</value></data>
+  <data name="common.description" xml:space="preserve"><value>Description</value></data>
+  <data name="common.code" xml:space="preserve"><value>Code</value></data>
+  <data name="common.date" xml:space="preserve"><value>Date</value></data>
+  <data name="common.notes" xml:space="preserve"><value>Notes</value></data>
+  <data name="common.showing" xml:space="preserve"><value>Affichage</value></data>
+  <data name="common.of" xml:space="preserve"><value>de</value></data>
+  <data name="common.records" xml:space="preserve"><value>enregistrements</value></data>
+
+  <!-- Navigation -->
+  <data name="nav.dashboard" xml:space="preserve"><value>Tableau de bord</value></data>
+  <data name="nav.masterdata" xml:space="preserve"><value>Données de base</value></data>
+  <data name="nav.products" xml:space="preserve"><value>Produits</value></data>
+  <data name="nav.materials" xml:space="preserve"><value>Matériaux</value></data>
+  <data name="nav.categories" xml:space="preserve"><value>Catégories</value></data>
+  <data name="nav.unitsOfMeasure" xml:space="preserve"><value>Unités de mesure</value></data>
+  <data name="nav.inventory" xml:space="preserve"><value>Inventaire</value></data>
+  <data name="nav.warehouses" xml:space="preserve"><value>Entrepôts</value></data>
+  <data name="nav.stockLevels" xml:space="preserve"><value>Niveaux de stock</value></data>
+  <data name="nav.stockMovements" xml:space="preserve"><value>Mouvements de stock</value></data>
+  <data name="nav.sales" xml:space="preserve"><value>Ventes</value></data>
+  <data name="nav.customers" xml:space="preserve"><value>Clients</value></data>
+  <data name="nav.salesOrders" xml:space="preserve"><value>Commandes de vente</value></data>
+  <data name="nav.purchasing" xml:space="preserve"><value>Achats</value></data>
+  <data name="nav.suppliers" xml:space="preserve"><value>Fournisseurs</value></data>
+  <data name="nav.purchaseOrders" xml:space="preserve"><value>Commandes d'achat</value></data>
+  <data name="nav.production" xml:space="preserve"><value>Production</value></data>
+  <data name="nav.workCenters" xml:space="preserve"><value>Centres de travail</value></data>
+  <data name="nav.productionOrders" xml:space="preserve"><value>Ordres de production</value></data>
+  <data name="nav.accounting" xml:space="preserve"><value>Comptabilité</value></data>
+  <data name="nav.accounts" xml:space="preserve"><value>Comptes</value></data>
+  <data name="nav.journalEntries" xml:space="preserve"><value>Écritures</value></data>
+  <data name="nav.hr" xml:space="preserve"><value>Ressources humaines</value></data>
+  <data name="nav.departments" xml:space="preserve"><value>Départements</value></data>
+  <data name="nav.employees" xml:space="preserve"><value>Employés</value></data>
+  <data name="nav.crm" xml:space="preserve"><value>CRM</value></data>
+  <data name="nav.contacts" xml:space="preserve"><value>Contacts</value></data>
+  <data name="nav.interactions" xml:space="preserve"><value>Interactions</value></data>
+  <data name="nav.qualityControl" xml:space="preserve"><value>Contrôle qualité</value></data>
+  <data name="nav.inspectionPlans" xml:space="preserve"><value>Plans d'inspection</value></data>
+  <data name="nav.qualityChecks" xml:space="preserve"><value>Contrôles qualité</value></data>
+  <data name="nav.ncrs" xml:space="preserve"><value>Rapports de non-conformité</value></data>
+  <data name="nav.notifications" xml:space="preserve"><value>Notifications</value></data>
+  <data name="nav.mailCampaigns" xml:space="preserve"><value>Campagnes mail</value></data>
+  <data name="nav.admin" xml:space="preserve"><value>Administration</value></data>
+  <data name="nav.users" xml:space="preserve"><value>Utilisateurs</value></data>
+  <data name="nav.roles" xml:space="preserve"><value>Rôles</value></data>
+
+  <!-- Auth -->
+  <data name="auth.login" xml:space="preserve"><value>Se connecter</value></data>
+  <data name="auth.logout" xml:space="preserve"><value>Se déconnecter</value></data>
+  <data name="auth.username" xml:space="preserve"><value>Nom d'utilisateur</value></data>
+  <data name="auth.password" xml:space="preserve"><value>Mot de passe</value></data>
+  <data name="auth.loginTitle" xml:space="preserve"><value>Connexion à SwiftApp ERP</value></data>
+  <data name="auth.invalidCredentials" xml:space="preserve"><value>Identifiants invalides.</value></data>
+
+  <!-- Errors -->
+  <data name="error.notFound" xml:space="preserve"><value>Page non trouvée</value></data>
+  <data name="error.accessDenied" xml:space="preserve"><value>Accès refusé</value></data>
+  <data name="error.serverError" xml:space="preserve"><value>Erreur inattendue</value></data>
+  <data name="error.accessDeniedMsg" xml:space="preserve"><value>Vous n'avez pas la permission d'accéder à cette ressource.</value></data>
+  <data name="error.notFoundMsg" xml:space="preserve"><value>La page que vous recherchez n'existe pas ou a été déplacée.</value></data>
+  <data name="error.serverErrorMsg" xml:space="preserve"><value>Une erreur inattendue s'est produite. Veuillez réessayer.</value></data>
+  <data name="error.retry" xml:space="preserve"><value>Réessayer</value></data>
+</root>

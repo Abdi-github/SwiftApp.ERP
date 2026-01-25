@@ -1,0 +1,116 @@
+@page "/app/notifications/campaigns/new"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Notification.Application.DTOs
+@using SwiftApp.ERP.Modules.Notification.Application.Services
+@attribute [Authorize(Policy = "NOTIFICATION:MANAGE")]
+@rendermode InteractiveServer
+@inject MailCampaignService CampaignService
+@inject NavigationManager Navigation
+
+<PageTitle>New Mail Campaign — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-megaphone me-2"></i>New Mail Campaign</h2>
+    <a href="/app/notifications/campaigns" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Campaigns
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="campaignForm">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Campaign Name <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.Name" />
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Template Code <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.TemplateCode" />
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Locale</label>
+                    <InputSelect class="form-select" @bind-Value="_model.Locale">
+                        <option value="de">Deutsch</option>
+                        <option value="fr">Français</option>
+                        <option value="it">Italiano</option>
+                        <option value="en">English</option>
+                    </InputSelect>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Description</label>
+                <InputTextArea class="form-control" rows="3" @bind-Value="_model.Description" />
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Target Segment</label>
+                    <InputText class="form-control" @bind-Value="_model.TargetSegment" placeholder="e.g., all, premium, newsletter" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Schedule</label>
+                    <InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_model.ScheduledAt" />
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Subject Override</label>
+                <InputText class="form-control" @bind-Value="_model.SubjectOverride" placeholder="Leave empty to use template subject" />
+            </div>
+
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>Create Campaign
+                </button>
+                <a href="/app/notifications/campaigns" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private CampaignFormModel _model = new();
+    private string? _error;
+    private bool _saving;
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            var request = new MailCampaignRequest(
+                _model.Name ?? "",
+                _model.Description,
+                _model.TemplateCode ?? "",
+                _model.Locale,
+                _model.TargetSegment,
+                _model.ScheduledAt.HasValue ? new DateTimeOffset(_model.ScheduledAt.Value) : null,
+                _model.SubjectOverride);
+
+            await CampaignService.CreateAsync(request, default);
+            Navigation.NavigateTo("/app/notifications/campaigns");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class CampaignFormModel
+    {
+        public string? Name { get; set; }
+        public string? Description { get; set; }
+        public string? TemplateCode { get; set; }
+        public string Locale { get; set; } = "de";
+        public string? TargetSegment { get; set; }
+        public DateTime? ScheduledAt { get; set; }
+        public string? SubjectOverride { get; set; }
+    }
+}

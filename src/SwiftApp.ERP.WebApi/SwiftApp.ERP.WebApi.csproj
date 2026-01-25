@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>SwiftApp.ERP.WebApi</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SwiftApp.ERP.SharedKernel\SwiftApp.ERP.SharedKernel.csproj" />
+    <ProjectReference Include="..\SwiftApp.ERP.Modules.Auth\SwiftApp.ERP.Modules.Auth.csproj" />
+    <ProjectReference Include="..\SwiftApp.ERP.Modules.MasterData\SwiftApp.ERP.Modules.MasterData.csproj" />
+    <ProjectReference Include="..\SwiftApp.ERP.Modules.Inventory\SwiftApp.ERP.Modules.Inventory.csproj" />
+    <ProjectReference Include="..\SwiftApp.ERP.Modules.Sales\SwiftApp.ERP.Modules.Sales.csproj" />
+    <ProjectReference Include="..\SwiftApp.ERP.Modules.Purchasing\SwiftApp.ERP.Modules.Purchasing.csproj" />
+    <ProjectReference Include="..\SwiftApp.ERP.Modules.Production\SwiftApp.ERP.Modules.Production.csproj" />
+    <ProjectReference Include="..\SwiftApp.ERP.Modules.Accounting\SwiftApp.ERP.Modules.Accounting.csproj" />
+    <ProjectReference Include="..\SwiftApp.ERP.Modules.Hr\SwiftApp.ERP.Modules.Hr.csproj" />
+    <ProjectReference Include="..\SwiftApp.ERP.Modules.Crm\SwiftApp.ERP.Modules.Crm.csproj" />
+    <ProjectReference Include="..\SwiftApp.ERP.Modules.QualityControl\SwiftApp.ERP.Modules.QualityControl.csproj" />
+    <ProjectReference Include="..\SwiftApp.ERP.Modules.Notification\SwiftApp.ERP.Modules.Notification.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="Serilog.Sinks.Seq" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="Mapster.DependencyInjection" />
+    <PackageReference Include="AspNetCore.HealthChecks.NpgSql" />
+    <PackageReference Include="Quartz.Extensions.Hosting" />
+  </ItemGroup>
+
+</Project>

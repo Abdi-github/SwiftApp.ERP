@@ -1,0 +1,210 @@
+@page "/app/qc/ncrs/new"
+@page "/app/qc/ncrs/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.QualityControl.Application.DTOs
+@using SwiftApp.ERP.Modules.QualityControl.Application.Services
+@using SwiftApp.ERP.SharedKernel.Domain
+@attribute [Authorize(Policy = "QC:CREATE")]
+@rendermode InteractiveServer
+@inject NonConformanceReportService NcrService
+@inject QualityCheckService CheckService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit NCR" : "New NCR") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-exclamation-triangle me-2"></i>@(_isEdit ? "Edit Non-Conformance Report" : "New Non-Conformance Report")</h2>
+    <a href="/app/qc/ncrs" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to NCRs
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+@if (_isEdit && _currentStatus is not null)
+{
+    <div class="card mb-3">
+        <div class="card-body d-flex align-items-center justify-content-between">
+            <span>
+                Status: <span class="badge @StatusBadge(_currentStatus)">@_currentStatus</span>
+                @if (_currentNcrNumber is not null) { <span class="ms-2 text-muted">@_currentNcrNumber</span> }
+            </span>
+            <div class="d-flex gap-2">
+                @if (_currentStatus == "Open")
+                {
+                    <button class="btn btn-sm btn-info" @onclick="StartNcr" disabled="@_actionBusy">
+                        <i class="bi bi-play-fill me-1"></i>Start Investigation
+                    </button>
+                }
+                @if (_currentStatus == "InProgress")
+                {
+                    <button class="btn btn-sm btn-success" @onclick="CloseNcr" disabled="@_actionBusy">
+                        <i class="bi bi-check-circle me-1"></i>Close NCR
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="ncrForm">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Quality Check</label>
+                    <InputSelect class="form-select" @bind-Value="_model.QualityCheckId">
+                        <option value="">— None —</option>
+                        @foreach (var check in _checks)
+                        {
+                            <option value="@check.Id">@check.CheckNumber — @check.Result (@check.CheckDate.ToString("dd.MM.yyyy"))</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Severity <span class="text-danger">*</span></label>
+                    <InputSelect class="form-select" @bind-Value="_model.Severity">
+                        <option value="">— Select Severity —</option>
+                        <option value="Minor">Minor</option>
+                        <option value="Major">Major</option>
+                        <option value="Critical">Critical</option>
+                    </InputSelect>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Description <span class="text-danger">*</span></label>
+                <InputTextArea class="form-control" rows="3" @bind-Value="_model.Description" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Root Cause</label>
+                <InputTextArea class="form-control" rows="2" @bind-Value="_model.RootCause" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Corrective Action</label>
+                <InputTextArea class="form-control" rows="2" @bind-Value="_model.CorrectiveAction" />
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Responsible Person</label>
+                    <InputText class="form-control" @bind-Value="_model.ResponsiblePerson" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Due Date</label>
+                    <InputDate class="form-control" @bind-Value="_model.DueDate" />
+                </div>
+            </div>
+
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/qc/ncrs" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private NcrFormModel _model = new();
+    private PagedResult<QualityCheckResponse>? _checksResult;
+    private IReadOnlyList<QualityCheckResponse> _checks = [];
+    private string? _currentStatus;
+    private string? _currentNcrNumber;
+    private string? _error;
+    private bool _saving;
+    private bool _actionBusy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _checksResult = await CheckService.GetPagedAsync(1, 200);
+        _checks = _checksResult.Items;
+
+        if (_isEdit)
+        {
+            var ncr = await NcrService.GetByIdAsync(Id!.Value);
+            if (ncr is null) { Navigation.NavigateTo("/app/qc/ncrs"); return; }
+            _currentStatus = ncr.Status;
+            _currentNcrNumber = ncr.NcrNumber;
+            _model = new NcrFormModel
+            {
+                QualityCheckId = ncr.QualityCheckId?.ToString() ?? "",
+                Description = ncr.Description,
+                Severity = ncr.Severity,
+                RootCause = ncr.RootCause,
+                CorrectiveAction = ncr.CorrectiveAction,
+                ResponsiblePerson = ncr.ResponsiblePerson,
+                DueDate = ncr.DueDate,
+            };
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            Guid? checkId = Guid.TryParse(_model.QualityCheckId, out var cid) ? cid : null;
+            var request = new NcrRequest(
+                checkId,
+                _model.Description,
+                _model.Severity ?? "Minor",
+                _model.RootCause,
+                _model.CorrectiveAction,
+                _model.ResponsiblePerson,
+                _model.DueDate);
+
+            if (_isEdit) await NcrService.UpdateAsync(Id!.Value, request);
+            else await NcrService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/qc/ncrs");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private async Task StartNcr()
+    {
+        _actionBusy = true; _error = null;
+        try { await NcrService.StartAsync(Id!.Value); _currentStatus = "InProgress"; }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _actionBusy = false; }
+    }
+
+    private async Task CloseNcr()
+    {
+        _actionBusy = true; _error = null;
+        try { await NcrService.CloseAsync(Id!.Value); _currentStatus = "Closed"; }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _actionBusy = false; }
+    }
+
+    private static string StatusBadge(string? status) => status switch
+    {
+        "Open" => "bg-primary",
+        "InProgress" => "bg-warning text-dark",
+        "Closed" => "bg-success",
+        _ => "bg-secondary"
+    };
+
+    private class NcrFormModel
+    {
+        public string? QualityCheckId { get; set; } = "";
+        public string? Description { get; set; } = "";
+        public string? Severity { get; set; } = "";
+        public string? RootCause { get; set; }
+        public string? CorrectiveAction { get; set; }
+        public string? ResponsiblePerson { get; set; }
+        public DateOnly? DueDate { get; set; }
+    }
+}

@@ -1,0 +1,112 @@
+@page "/app/masterdata/categories/new"
+@page "/app/masterdata/categories/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.MasterData.Application.DTOs
+@using SwiftApp.ERP.Modules.MasterData.Application.Services
+@attribute [Authorize(Policy = "MASTERDATA:CREATE")]
+@rendermode InteractiveServer
+@inject CategoryService CategoryService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit Category" : "New Category") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-tags me-2"></i>@(_isEdit ? "Edit Category" : "New Category")</h2>
+    <a href="/app/masterdata/categories" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Categories
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="categoryForm">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Name <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.Name" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Parent Category</label>
+                    <InputSelect class="form-select" @bind-Value="_model.ParentCategoryId">
+                        <option value="">— None (Root) —</option>
+                        @foreach (var c in _categories.Where(c => c.Id != Id))
+                        {
+                            <option value="@c.Id">@c.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Description</label>
+                <InputTextArea class="form-control" rows="3" @bind-Value="_model.Description" />
+            </div>
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/masterdata/categories" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private CategoryFormModel _model = new();
+    private List<CategoryResponse> _categories = [];
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _categories = await CategoryService.GetAllAsync();
+
+        if (_isEdit)
+        {
+            var category = await CategoryService.GetByIdAsync(Id!.Value);
+            if (category is null) { Navigation.NavigateTo("/app/masterdata/categories"); return; }
+            _model = new CategoryFormModel
+            {
+                Name = category.Name,
+                Description = category.Description,
+                ParentCategoryId = category.ParentCategoryId?.ToString() ?? "",
+            };
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            Guid? parentId = Guid.TryParse(_model.ParentCategoryId, out var pid) ? pid : null;
+            var request = new CategoryRequest(_model.Name, _model.Description, parentId, null, null);
+
+            if (_isEdit) await CategoryService.UpdateAsync(Id!.Value, request);
+            else await CategoryService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/masterdata/categories");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class CategoryFormModel
+    {
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public string ParentCategoryId { get; set; } = "";
+    }
+}

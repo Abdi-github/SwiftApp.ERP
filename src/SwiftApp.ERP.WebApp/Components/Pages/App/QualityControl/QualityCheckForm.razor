@@ -1,0 +1,162 @@
+@page "/app/qc/checks/new"
+@page "/app/qc/checks/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.QualityControl.Application.DTOs
+@using SwiftApp.ERP.Modules.QualityControl.Application.Services
+@attribute [Authorize(Policy = "QC:CREATE")]
+@rendermode InteractiveServer
+@inject QualityCheckService CheckService
+@inject InspectionPlanService PlanService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit Quality Check" : "New Quality Check") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-check2-circle me-2"></i>@(_isEdit ? "Edit Quality Check" : "New Quality Check")</h2>
+    <a href="/app/qc/checks" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Checks
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="qualityCheckForm">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Inspection Plan</label>
+                    <InputSelect class="form-select" @bind-Value="_model.InspectionPlanId">
+                        <option value="">— None —</option>
+                        @foreach (var plan in _plans)
+                        {
+                            <option value="@plan.Id">@plan.PlanNumber — @plan.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Inspector Name <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.InspectorName" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Check Date <span class="text-danger">*</span></label>
+                    <InputDate class="form-control" @bind-Value="_model.CheckDate" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Result <span class="text-danger">*</span></label>
+                    <InputSelect class="form-select" @bind-Value="_model.Result">
+                        <option value="">— Select Result —</option>
+                        <option value="Pass">Pass</option>
+                        <option value="Fail">Fail</option>
+                        <option value="Conditional">Conditional</option>
+                    </InputSelect>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Batch Number</label>
+                    <InputText class="form-control" @bind-Value="_model.BatchNumber" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Sample Size</label>
+                    <InputNumber class="form-control" @bind-Value="_model.SampleSize" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Defect Count</label>
+                    <InputNumber class="form-control" @bind-Value="_model.DefectCount" />
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Notes</label>
+                <InputTextArea class="form-control" rows="3" @bind-Value="_model.Notes" />
+            </div>
+
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/qc/checks" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private QualityCheckFormModel _model = new();
+    private IReadOnlyList<InspectionPlanResponse> _plans = [];
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _plans = await PlanService.GetActiveAsync();
+
+        if (_isEdit)
+        {
+            var check = await CheckService.GetByIdAsync(Id!.Value);
+            if (check is null) { Navigation.NavigateTo("/app/qc/checks"); return; }
+            _model = new QualityCheckFormModel
+            {
+                InspectionPlanId = check.InspectionPlanId?.ToString() ?? "",
+                InspectorName = check.InspectorName,
+                CheckDate = check.CheckDate,
+                Result = check.Result,
+                BatchNumber = check.BatchNumber,
+                SampleSize = check.SampleSize,
+                DefectCount = check.DefectCount,
+                Notes = check.Notes,
+            };
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            Guid? planId = Guid.TryParse(_model.InspectionPlanId, out var pid) ? pid : null;
+            var request = new QualityCheckRequest(
+                planId,
+                _model.InspectorName,
+                _model.CheckDate,
+                _model.Result ?? "Pass",
+                null,
+                _model.BatchNumber,
+                _model.SampleSize,
+                _model.DefectCount,
+                _model.Notes);
+
+            if (_isEdit) await CheckService.UpdateAsync(Id!.Value, request);
+            else await CheckService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/qc/checks");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class QualityCheckFormModel
+    {
+        public string? InspectionPlanId { get; set; } = "";
+        public string? InspectorName { get; set; } = "";
+        public DateOnly CheckDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+        public string? Result { get; set; } = "";
+        public string? BatchNumber { get; set; }
+        public int SampleSize { get; set; } = 1;
+        public int DefectCount { get; set; }
+        public string? Notes { get; set; }
+    }
+}

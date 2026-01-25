@@ -1,0 +1,178 @@
+@page "/app/masterdata/materials"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.MasterData.Application.DTOs
+@using SwiftApp.ERP.Modules.MasterData.Application.Services
+@using SwiftApp.ERP.SharedKernel.Domain
+@attribute [Authorize(Policy = "MASTERDATA:VIEW")]
+@rendermode InteractiveServer
+@inject MaterialService MaterialService
+
+<PageTitle>Materials — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-gem me-2"></i>Materials</h2>
+    <AuthorizeView Policy="MASTERDATA:CREATE">
+        <a href="/app/masterdata/materials/new" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>New Material
+        </a>
+    </AuthorizeView>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" placeholder="Search materials..." @bind="_search" @bind:event="oninput" @bind:after="SearchChanged" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" @bind="_activeFilter" @bind:after="FilterChanged">
+                    <option value="">All Status</option>
+                    <option value="true">Active</option>
+                    <option value="false">Inactive</option>
+                </select>
+            </div>
+        </div>
+
+        @if (_loading)
+        {
+            <div class="text-center p-4"><div class="spinner-border text-primary" role="status"></div></div>
+        }
+        else if (_result is null || _result.Items.Count == 0)
+        {
+            <div class="alert alert-info">No materials found.</div>
+        }
+        else
+        {
+            <small class="text-muted mb-2 d-block">Showing @((_page - 1) * PageSize + 1)–@(Math.Min(_page * PageSize, _result.TotalItems)) of @_result.TotalItems materials</small>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th role="button" @onclick='() => SortBy("Sku")'>SKU <i class="bi @SortIcon("Sku")"></i></th>
+                            <th role="button" @onclick='() => SortBy("Name")'>Name <i class="bi @SortIcon("Name")"></i></th>
+                            <th>Category</th>
+                            <th>UoM</th>
+                            <th role="button" class="text-end" @onclick='() => SortBy("UnitPrice")'>Unit Price <i class="bi @SortIcon("UnitPrice")"></i></th>
+                            <th role="button" class="text-end" @onclick='() => SortBy("MinimumStock")'>Min Stock <i class="bi @SortIcon("MinimumStock")"></i></th>
+                            <th>Active</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var m in _sorted)
+                        {
+                            <tr>
+                                <td><code>@m.Sku</code></td>
+                                <td>@m.Name</td>
+                                <td>@(m.CategoryName ?? "—")</td>
+                                <td>@(m.UnitOfMeasureCode ?? "—")</td>
+                                <td class="text-end">CHF @m.UnitPrice.ToString("N2")</td>
+                                <td class="text-end">@m.MinimumStock.ToString("N2")</td>
+                                <td>
+                                    @if (m.Active)
+                                    {<span class="badge bg-success">Active</span>}
+                                    else
+                                    {<span class="badge bg-danger">Inactive</span>}
+                                </td>
+                                <td class="text-end">
+                                    <AuthorizeView Policy="MASTERDATA:EDIT">
+                                        <a href="/app/masterdata/materials/edit/@m.Id" class="btn btn-sm btn-outline-primary me-1"><i class="bi bi-pencil"></i></a>
+                                    </AuthorizeView>
+                                    <AuthorizeView Policy="MASTERDATA:DELETE">
+                                        <a href="/app/masterdata/materials/delete/@m.Id" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></a>
+                                    </AuthorizeView>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <nav>
+                <ul class="pagination justify-content-center">
+                    <li class="page-item @(_page <= 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => GoToPage(_page - 1)">Previous</button>
+                    </li>
+                    @for (int i = 1; i <= _result.TotalPages; i++)
+                    {
+                        var pg = i;
+                        <li class="page-item @(pg == _page ? "active" : "")">
+                            <button class="page-link" @onclick="() => GoToPage(pg)">@pg</button>
+                        </li>
+                    }
+                    <li class="page-item @(_page >= _result.TotalPages ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => GoToPage(_page + 1)">Next</button>
+                    </li>
+                </ul>
+            </nav>
+        }
+    </div>
+</div>
+
+@code {
+    private PagedResult<MaterialResponse>? _result;
+    private List<MaterialResponse> _sorted = [];
+    private string? _search;
+    private string _activeFilter = "";
+    private string _sortColumn = "Sku";
+    private bool _sortAsc = true;
+    private int _page = 1;
+    private const int PageSize = 20;
+    private bool _loading = true;
+    private System.Timers.Timer? _debounceTimer;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        StateHasChanged();
+        _result = await MaterialService.GetPagedAsync(_page, PageSize, _search);
+        ApplyClientFilters();
+        _loading = false;
+    }
+
+    private void ApplyClientFilters()
+    {
+        if (_result is null) { _sorted = []; return; }
+        IEnumerable<MaterialResponse> items = _result.Items;
+        if (_activeFilter is "true") items = items.Where(m => m.Active);
+        else if (_activeFilter is "false") items = items.Where(m => !m.Active);
+        _sorted = _sortColumn switch
+        {
+            "Name" => _sortAsc ? items.OrderBy(m => m.Name).ToList() : items.OrderByDescending(m => m.Name).ToList(),
+            "UnitPrice" => _sortAsc ? items.OrderBy(m => m.UnitPrice).ToList() : items.OrderByDescending(m => m.UnitPrice).ToList(),
+            "MinimumStock" => _sortAsc ? items.OrderBy(m => m.MinimumStock).ToList() : items.OrderByDescending(m => m.MinimumStock).ToList(),
+            _ => _sortAsc ? items.OrderBy(m => m.Sku).ToList() : items.OrderByDescending(m => m.Sku).ToList()
+        };
+    }
+
+    private void SortBy(string column) { if (_sortColumn == column) _sortAsc = !_sortAsc; else { _sortColumn = column; _sortAsc = true; } ApplyClientFilters(); }
+    private string SortIcon(string column) => _sortColumn != column ? "bi-chevron-expand" : _sortAsc ? "bi-chevron-up" : "bi-chevron-down";
+    private Task FilterChanged() { _page = 1; return LoadData(); }
+
+    private void SearchChanged()
+    {
+        _debounceTimer?.Stop();
+        _debounceTimer?.Dispose();
+        _debounceTimer = new System.Timers.Timer(300);
+        _debounceTimer.Elapsed += async (_, _) =>
+        {
+            _debounceTimer?.Stop();
+            _page = 1;
+            await InvokeAsync(async () => { await LoadData(); StateHasChanged(); });
+        };
+        _debounceTimer.AutoReset = false;
+        _debounceTimer.Start();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page < 1 || (_result is not null && page > _result.TotalPages)) return;
+        _page = page;
+        await LoadData();
+    }
+}

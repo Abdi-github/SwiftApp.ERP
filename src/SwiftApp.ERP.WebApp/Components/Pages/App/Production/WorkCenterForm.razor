@@ -1,0 +1,122 @@
+@page "/app/production/workcenters/new"
+@page "/app/production/workcenters/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Production.Application.DTOs
+@using SwiftApp.ERP.Modules.Production.Application.Services
+@attribute [Authorize(Policy = "PRODUCTION:CREATE")]
+@rendermode InteractiveServer
+@inject WorkCenterService WorkCenterService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit Work Center" : "New Work Center") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-gear me-2"></i>@(_isEdit ? "Edit Work Center" : "New Work Center")</h2>
+    <a href="/app/production/workcenters" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Work Centers
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="workCenterForm">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Code <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.Code" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Name <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.Name" />
+                </div>
+                <div class="col-md-4 mb-3 d-flex align-items-end">
+                    <div class="form-check">
+                        <InputCheckbox class="form-check-input" @bind-Value="_model.Active" />
+                        <label class="form-check-label">Active</label>
+                    </div>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Description</label>
+                <InputTextArea class="form-control" rows="2" @bind-Value="_model.Description" />
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Capacity Per Day</label>
+                    <InputNumber class="form-control" @bind-Value="_model.CapacityPerDay" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Cost Per Hour (CHF)</label>
+                    <InputNumber class="form-control" @bind-Value="_model.CostPerHour" />
+                </div>
+            </div>
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/production/workcenters" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private WorkCenterFormModel _model = new();
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            var wc = await WorkCenterService.GetByIdAsync(Id!.Value);
+            if (wc is null) { Navigation.NavigateTo("/app/production/workcenters"); return; }
+            _model = new WorkCenterFormModel
+            {
+                Code = wc.Code, Name = wc.Name, Description = wc.Description,
+                CapacityPerDay = wc.CapacityPerDay, CostPerHour = wc.CostPerHour, Active = wc.Active,
+            };
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            var request = new WorkCenterRequest(
+                _model.Code, _model.Name, _model.Description,
+                _model.CapacityPerDay, _model.CostPerHour, _model.Active, null, null);
+
+            if (_isEdit) await WorkCenterService.UpdateAsync(Id!.Value, request);
+            else await WorkCenterService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/production/workcenters");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class WorkCenterFormModel
+    {
+        public string Code { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public decimal CapacityPerDay { get; set; } = 8;
+        public decimal CostPerHour { get; set; }
+        public bool Active { get; set; } = true;
+    }
+}

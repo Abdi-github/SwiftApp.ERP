@@ -1,0 +1,161 @@
+@page "/app/crm/interactions/new"
+@page "/app/crm/interactions/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Crm.Application.DTOs
+@using SwiftApp.ERP.Modules.Crm.Application.Services
+@using SwiftApp.ERP.Modules.Crm.Domain.Enums
+@attribute [Authorize(Policy = "CRM:CREATE")]
+@rendermode InteractiveServer
+@inject InteractionService InteractionService
+@inject ContactService ContactService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit Interaction" : "New Interaction") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-chat-dots me-2"></i>@(_isEdit ? "Edit Interaction" : "New Interaction")</h2>
+    <a href="/app/crm/interactions" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Interactions
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="interactionForm">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Contact <span class="text-danger">*</span></label>
+                    <InputSelect class="form-select" @bind-Value="_model.ContactId">
+                        <option value="">— Select Contact —</option>
+                        @foreach (var c in _contacts)
+                        {
+                            <option value="@c.Id">@c.DisplayName</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Type <span class="text-danger">*</span></label>
+                    <InputSelect class="form-select" @bind-Value="_model.InteractionType">
+                        @foreach (var t in Enum.GetValues<InteractionType>())
+                        {
+                            <option value="@t">@t</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Date</label>
+                    <InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="_model.InteractionDate" />
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Subject <span class="text-danger">*</span></label>
+                <InputText class="form-control" @bind-Value="_model.Subject" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Description</label>
+                <InputTextArea class="form-control" rows="4" @bind-Value="_model.Description" />
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Follow-up Date</label>
+                    <InputDate class="form-control" @bind-Value="_model.FollowUpDate" />
+                </div>
+                <div class="col-md-6 mb-3 d-flex align-items-end">
+                    <div class="form-check">
+                        <InputCheckbox class="form-check-input" @bind-Value="_model.Completed" />
+                        <label class="form-check-label">Completed</label>
+                    </div>
+                </div>
+            </div>
+
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/crm/interactions" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private InteractionFormModel _model = new();
+    private List<ContactResponse> _contacts = [];
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var contactResult = await ContactService.GetPagedAsync(1, 500);
+        _contacts = contactResult.Items.ToList();
+
+        if (_isEdit)
+        {
+            var i = await InteractionService.GetByIdAsync(Id!.Value);
+            if (i is null) { Navigation.NavigateTo("/app/crm/interactions"); return; }
+            _model = new InteractionFormModel
+            {
+                ContactId = i.ContactId.ToString(),
+                InteractionType = Enum.TryParse<InteractionType>(i.InteractionType, out var t) ? t : InteractionType.Note,
+                Subject = i.Subject,
+                Description = i.Description,
+                InteractionDate = i.InteractionDate.LocalDateTime,
+                FollowUpDate = i.FollowUpDate?.LocalDateTime.Date,
+                Completed = i.Completed,
+            };
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            if (!Guid.TryParse(_model.ContactId, out var contactId))
+            {
+                _error = "Please select a contact."; _saving = false; return;
+            }
+
+            var request = new InteractionRequest(
+                contactId,
+                _model.InteractionType.ToString(),
+                _model.Subject ?? "",
+                _model.Description,
+                _model.InteractionDate.HasValue ? new DateTimeOffset(_model.InteractionDate.Value) : null,
+                _model.FollowUpDate.HasValue ? new DateTimeOffset(_model.FollowUpDate.Value, TimeSpan.Zero) : null,
+                null,
+                _model.Completed);
+
+            if (_isEdit) await InteractionService.UpdateAsync(Id!.Value, request);
+            else await InteractionService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/crm/interactions");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class InteractionFormModel
+    {
+        public string? ContactId { get; set; }
+        public InteractionType InteractionType { get; set; } = InteractionType.Note;
+        public string? Subject { get; set; }
+        public string? Description { get; set; }
+        public DateTime? InteractionDate { get; set; } = DateTime.Now;
+        public DateTime? FollowUpDate { get; set; }
+        public bool Completed { get; set; }
+    }
+}

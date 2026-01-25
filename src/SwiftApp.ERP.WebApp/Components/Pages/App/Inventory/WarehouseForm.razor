@@ -1,0 +1,114 @@
+@page "/app/inventory/warehouses/new"
+@page "/app/inventory/warehouses/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Inventory.Application.DTOs
+@using SwiftApp.ERP.Modules.Inventory.Application.Services
+@attribute [Authorize(Policy = "INVENTORY:CREATE")]
+@rendermode InteractiveServer
+@inject WarehouseService WarehouseService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit Warehouse" : "New Warehouse") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-building me-2"></i>@(_isEdit ? "Edit Warehouse" : "New Warehouse")</h2>
+    <a href="/app/inventory/warehouses" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Warehouses
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="warehouseForm">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Code <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.Code" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Name <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.Name" />
+                </div>
+                <div class="col-md-4 mb-3 d-flex align-items-end">
+                    <div class="form-check">
+                        <InputCheckbox class="form-check-input" @bind-Value="_model.Active" />
+                        <label class="form-check-label">Active</label>
+                    </div>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Description</label>
+                <InputTextArea class="form-control" rows="2" @bind-Value="_model.Description" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Address</label>
+                <InputTextArea class="form-control" rows="2" @bind-Value="_model.Address" />
+            </div>
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/inventory/warehouses" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private WarehouseFormModel _model = new();
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            var w = await WarehouseService.GetByIdAsync(Id!.Value);
+            if (w is null) { Navigation.NavigateTo("/app/inventory/warehouses"); return; }
+            _model = new WarehouseFormModel
+            {
+                Code = w.Code, Name = w.Name, Description = w.Description,
+                Address = w.Address, Active = w.Active,
+            };
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            var request = new WarehouseRequest(
+                _model.Code, _model.Name, _model.Description, _model.Address, _model.Active, null, null);
+
+            if (_isEdit) await WarehouseService.UpdateAsync(Id!.Value, request);
+            else await WarehouseService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/inventory/warehouses");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class WarehouseFormModel
+    {
+        public string Code { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public string? Address { get; set; }
+        public bool Active { get; set; } = true;
+    }
+}

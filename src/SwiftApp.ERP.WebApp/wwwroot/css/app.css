@@ -1,0 +1,11 @@
+/* SwiftApp ERP — Custom Styles */
+
+.nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 0.375rem;
+}
+
+.nav-link.active {
+    background-color: rgba(255, 193, 7, 0.2) !important;
+    color: #ffc107 !important;
+}

@@ -1,0 +1,385 @@
+@page "/app/dashboard"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Sales.Domain.Interfaces
+@using SwiftApp.ERP.Modules.Purchasing.Domain.Interfaces
+@using SwiftApp.ERP.Modules.Production.Domain.Interfaces
+@using SwiftApp.ERP.Modules.Inventory.Domain.Interfaces
+@using SwiftApp.ERP.Modules.QualityControl.Domain.Interfaces
+@using SwiftApp.ERP.Modules.Accounting.Domain.Interfaces
+@using SwiftApp.ERP.Modules.Hr.Domain.Interfaces
+@using SwiftApp.ERP.Modules.Crm.Domain.Interfaces
+@using SwiftApp.ERP.Modules.MasterData.Application.Services
+@using SwiftApp.ERP.Modules.Sales.Application.Services
+@using SwiftApp.ERP.Modules.Sales.Application.DTOs
+@using SwiftApp.ERP.SharedKernel.Domain
+@using SwiftApp.ERP.SharedKernel.Interfaces
+@attribute [Authorize(Policy = "DASHBOARD:VIEW")]
+@rendermode InteractiveServer
+@inject ISalesModuleApi SalesApi
+@inject IPurchasingModuleApi PurchasingApi
+@inject IProductionModuleApi ProductionApi
+@inject IInventoryModuleApi InventoryApi
+@inject IQualityControlModuleApi QcApi
+@inject IAccountingModuleApi AccountingApi
+@inject IHrModuleApi HrApi
+@inject ICrmModuleApi CrmApi
+@inject ProductService ProductService
+@inject SalesOrderService SalesOrderService
+@inject ICacheService Cache
+
+<PageTitle>Dashboard — SwiftApp ERP</PageTitle>
+
+<h1 class="mb-4"><i class="bi bi-speedometer2 me-2"></i>Dashboard</h1>
+
+@if (_loading)
+{
+    <div class="text-center p-5"><div class="spinner-border text-primary" role="status"></div></div>
+}
+else
+{
+    @* ── KPI Cards Row 1 ── *@
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3">
+                        <i class="bi bi-currency-dollar text-primary fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Monthly Revenue</div>
+                        <div class="fs-4 fw-bold">CHF @_monthlyRevenue.ToString("N0")</div>
+                        <small class="text-muted">@DateTimeOffset.UtcNow.ToString("MMMM yyyy")</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="rounded-circle bg-success bg-opacity-10 p-3 me-3">
+                        <i class="bi bi-cart-check text-success fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Open Sales Orders</div>
+                        <div class="fs-4 fw-bold">@_openSalesOrders</div>
+                        <small class="text-muted">Pending fulfillment</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="rounded-circle bg-info bg-opacity-10 p-3 me-3">
+                        <i class="bi bi-truck text-info fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Open Purchase Orders</div>
+                        <div class="fs-4 fw-bold">@_openPurchaseOrders</div>
+                        <small class="text-muted">Awaiting delivery</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="rounded-circle bg-warning bg-opacity-10 p-3 me-3">
+                        <i class="bi bi-gear text-warning fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Active Production</div>
+                        <div class="fs-4 fw-bold">@_activeProduction</div>
+                        <small class="text-muted">Orders in progress</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── KPI Cards Row 2 ── *@
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="rounded-circle bg-danger bg-opacity-10 p-3 me-3">
+                        <i class="bi bi-exclamation-triangle text-danger fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Low Stock Items</div>
+                        <div class="fs-4 fw-bold">@_lowStockItems</div>
+                        <small class="text-muted">Below threshold (10 units)</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="rounded-circle bg-secondary bg-opacity-10 p-3 me-3">
+                        <i class="bi bi-clipboard-check text-secondary fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">QC Pass Rate</div>
+                        <div class="fs-4 fw-bold">@_qcPassRate.ToString("N1")%</div>
+                        <small class="text-muted">Last 90 days</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3">
+                        <i class="bi bi-people text-primary fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Active Employees</div>
+                        <div class="fs-4 fw-bold">@_activeEmployees</div>
+                        <small class="text-muted">Across @_departments departments</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="rounded-circle bg-success bg-opacity-10 p-3 me-3">
+                        <i class="bi bi-journal-text text-success fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Unposted Journal Entries</div>
+                        <div class="fs-4 fw-bold">@_unpostedEntries</div>
+                        <small class="text-muted">Require posting</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── Charts Row ── *@
+    <div class="row g-3 mb-4">
+        @* Order Status Distribution *@
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0 fw-bold">
+                    <i class="bi bi-pie-chart me-2"></i>Sales Order Status
+                </div>
+                <div class="card-body">
+                    @if (_orderStatusCounts.Count > 0)
+                    {
+                        <div class="d-flex flex-wrap gap-3 mb-3">
+                            @foreach (var (status, count) in _orderStatusCounts)
+                            {
+                                <div class="d-flex align-items-center gap-2">
+                                    <div style="width:14px; height:14px; border-radius:3px; background-color: @GetStatusColor(status);"></div>
+                                    <span class="small">@status: <strong>@count</strong></span>
+                                </div>
+                            }
+                        </div>
+                        <div class="progress" style="height: 32px;">
+                            @foreach (var (status, count) in _orderStatusCounts)
+                            {
+                                var totalOrders = _orderStatusCounts.Values.Sum();
+                                var pct = totalOrders > 0 ? (double)count / totalOrders * 100 : 0;
+                                <div class="progress-bar" role="progressbar"
+                                     style="width: @pct.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)%; background-color: @GetStatusColor(status);"
+                                     title="@status: @count">
+                                    @if (pct > 10)
+                                    {
+                                        <span class="small">@count</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-muted text-center py-4">No orders yet</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Monthly Revenue Mini-Bar *@
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0 fw-bold">
+                    <i class="bi bi-bar-chart me-2"></i>Monthly Revenue (CHF)
+                </div>
+                <div class="card-body">
+                    @if (_monthlyRevenueData.Count > 0)
+                    {
+                        var maxRev = _monthlyRevenueData.Values.DefaultIfEmpty(1m).Max();
+                        if (maxRev == 0m) maxRev = 1m;
+                        <div class="d-flex align-items-end justify-content-around" style="height: 180px;">
+                            @foreach (var (month, revenue) in _monthlyRevenueData)
+                            {
+                                var heightPct = (double)(revenue / maxRev) * 100;
+                                <div class="text-center flex-fill px-1">
+                                    <div class="small text-muted mb-1">@(revenue > 0 ? $"{revenue / 1000:N0}k" : "0")</div>
+                                    <div class="mx-auto rounded-top"
+                                         style="width: 100%; max-width: 40px; height: @heightPct.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)%; min-height: 4px; background: linear-gradient(180deg, #1a237e, #3949ab);">
+                                    </div>
+                                    <div class="small text-muted mt-1">@month</div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-muted text-center py-4">No revenue data</div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── Recent Orders ── *@
+    <div class="row g-3">
+        <div class="col-lg-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="bi bi-clock-history me-2"></i>Recent Sales Orders</span>
+                    <a href="/app/sales/orders" class="btn btn-sm btn-outline-primary">View All</a>
+                </div>
+                <div class="card-body p-0">
+                    @if (_recentOrders is not null && _recentOrders.Items.Count > 0)
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Order #</th>
+                                        <th>Customer</th>
+                                        <th>Status</th>
+                                        <th>Date</th>
+                                        <th class="text-end">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var o in _recentOrders.Items)
+                                    {
+                                        <tr>
+                                            <td><code>@o.OrderNumber</code></td>
+                                            <td>@o.CustomerName</td>
+                                            <td><span class="badge @GetBadgeClass(o.Status)">@o.Status</span></td>
+                                            <td>@o.OrderDate.ToString("dd.MM.yyyy")</td>
+                                            <td class="text-end fw-bold">CHF @o.TotalAmount.ToString("N2")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-muted text-center py-4">No recent orders</div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+
+    // KPIs
+    private decimal _monthlyRevenue;
+    private long _openSalesOrders;
+    private long _openPurchaseOrders;
+    private long _activeProduction;
+    private long _lowStockItems;
+    private decimal _qcPassRate;
+    private long _activeEmployees;
+    private long _departments;
+    private long _unpostedEntries;
+
+    // Charts
+    private Dictionary<string, int> _orderStatusCounts = new();
+    private Dictionary<string, decimal> _monthlyRevenueData = new();
+
+    // Recent
+    private PagedResult<SalesOrderResponse>? _recentOrders;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var today = DateOnly.FromDateTime(now.DateTime);
+        var cacheExpiry = TimeSpan.FromMinutes(3);
+
+        // Load KPIs via cache (GetOrSetAsync handles both value/reference types correctly)
+        _monthlyRevenue = await Cache.GetOrSetAsync($"dashboard:revenue:{now.Year}:{now.Month}",
+            () => SalesApi.GetMonthlyRevenueAsync(now.Year, now.Month), cacheExpiry);
+        _openSalesOrders = await Cache.GetOrSetAsync("dashboard:open_sales",
+            () => SalesApi.GetOpenOrderCountAsync(), cacheExpiry);
+        _openPurchaseOrders = await Cache.GetOrSetAsync("dashboard:open_purchases",
+            () => PurchasingApi.GetOpenPurchaseOrderCountAsync(), cacheExpiry);
+        _activeProduction = await Cache.GetOrSetAsync("dashboard:active_production",
+            () => ProductionApi.GetActiveProductionOrderCountAsync(), cacheExpiry);
+        _lowStockItems = await Cache.GetOrSetAsync("dashboard:low_stock",
+            () => InventoryApi.CountLowStockItemsAsync(10m), cacheExpiry);
+        _qcPassRate = await Cache.GetOrSetAsync("dashboard:qc_pass_rate",
+            () => QcApi.GetPassRateAsync(today.AddDays(-90), today), cacheExpiry);
+        _activeEmployees = await Cache.GetOrSetAsync("dashboard:employees",
+            () => HrApi.GetActiveEmployeeCountAsync(), cacheExpiry);
+        _departments = await Cache.GetOrSetAsync("dashboard:departments",
+            () => HrApi.GetDepartmentCountAsync(), cacheExpiry);
+        _unpostedEntries = await Cache.GetOrSetAsync("dashboard:unposted_entries",
+            () => AccountingApi.GetUnpostedEntryCountAsync(), cacheExpiry);
+        _recentOrders = await SalesOrderService.GetPagedAsync(1, 5);
+
+        // Build order status chart
+        await LoadOrderStatusCounts();
+
+        // Build monthly revenue chart (last 6 months)
+        await LoadMonthlyRevenue(now);
+
+        _loading = false;
+    }
+
+    private async Task LoadOrderStatusCounts()
+    {
+        var allOrders = await SalesOrderService.GetPagedAsync(1, 1000);
+        _orderStatusCounts = allOrders.Items
+            .GroupBy(o => o.Status)
+            .OrderBy(g => g.Key)
+            .ToDictionary(g => g.Key, g => g.Count());
+    }
+
+    private async Task LoadMonthlyRevenue(DateTimeOffset now)
+    {
+        _monthlyRevenueData = new Dictionary<string, decimal>();
+        for (int i = 5; i >= 0; i--)
+        {
+            var date = now.AddMonths(-i);
+            var revenue = await SalesApi.GetMonthlyRevenueAsync(date.Year, date.Month);
+            _monthlyRevenueData[date.ToString("MMM")] = revenue;
+        }
+    }
+
+    private static string GetStatusColor(string status) => status switch
+    {
+        "Draft" => "#6c757d",
+        "Confirmed" => "#0d6efd",
+        "Processing" => "#0dcaf0",
+        "Shipped" => "#ffc107",
+        "Delivered" => "#198754",
+        "Invoiced" => "#6610f2",
+        "Completed" => "#198754",
+        "Cancelled" => "#dc3545",
+        _ => "#adb5bd"
+    };
+
+    private static string GetBadgeClass(string status) => status switch
+    {
+        "Draft" => "bg-secondary",
+        "Confirmed" => "bg-primary",
+        "Processing" => "bg-info",
+        "Shipped" => "bg-warning text-dark",
+        "Delivered" or "Completed" => "bg-success",
+        "Cancelled" => "bg-danger",
+        _ => "bg-secondary"
+    };
+}

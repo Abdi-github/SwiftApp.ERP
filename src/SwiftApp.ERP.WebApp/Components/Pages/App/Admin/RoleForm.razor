@@ -1,0 +1,129 @@
+@page "/app/admin/roles/new"
+@page "/app/admin/roles/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Auth.Application.DTOs
+@using SwiftApp.ERP.Modules.Auth.Application.Services
+@attribute [Authorize(Policy = "ADMIN:USERS_MANAGE")]
+@rendermode InteractiveServer
+@inject RoleService RoleService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit Role" : "New Role") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-shield-lock me-2"></i>@(_isEdit ? "Edit Role" : "New Role")</h2>
+    <a href="/app/admin/roles" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Roles
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="roleForm">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Role Name <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.Name" />
+                </div>
+                <div class="col-md-8 mb-3">
+                    <label class="form-label">Description</label>
+                    <InputText class="form-control" @bind-Value="_model.Description" />
+                </div>
+            </div>
+
+            <h5 class="mt-4 mb-3">Permissions</h5>
+            @foreach (var group in _permissionsByModule)
+            {
+                <div class="mb-3">
+                    <h6 class="text-uppercase text-muted">@group.Key</h6>
+                    <div class="row">
+                        @foreach (var perm in group.Value)
+                        {
+                            <div class="col-md-3 mb-1">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="@($"perm-{perm.Id}")"
+                                           checked="@_selectedPermissionIds.Contains(perm.Id)"
+                                           @onchange="(e) => TogglePermission(perm.Id, (bool)(e.Value ?? false))" />
+                                    <label class="form-check-label" for="@($"perm-{perm.Id}")">
+                                        <code>@perm.Code</code>
+                                    </label>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/admin/roles" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private RoleFormModel _model = new();
+    private Dictionary<string, List<PermissionResponse>> _permissionsByModule = new();
+    private HashSet<Guid> _selectedPermissionIds = [];
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _permissionsByModule = await RoleService.GetPermissionsGroupedByModuleAsync();
+
+        if (_isEdit)
+        {
+            var role = await RoleService.GetByIdAsync(Id!.Value);
+            if (role is null) { Navigation.NavigateTo("/app/admin/roles"); return; }
+            _model = new RoleFormModel { Name = role.Name, Description = role.Description };
+            _selectedPermissionIds = [.. role.Permissions.Select(p => p.Id)];
+        }
+    }
+
+    private void TogglePermission(Guid permId, bool selected)
+    {
+        if (selected) _selectedPermissionIds.Add(permId);
+        else _selectedPermissionIds.Remove(permId);
+    }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            var request = new RoleRequest(
+                _model.Name, _model.Description,
+                _selectedPermissionIds.Count > 0 ? _selectedPermissionIds.AsReadOnly() : null);
+
+            if (_isEdit) await RoleService.UpdateAsync(Id!.Value, request);
+            else await RoleService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/admin/roles");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class RoleFormModel
+    {
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+    }
+}

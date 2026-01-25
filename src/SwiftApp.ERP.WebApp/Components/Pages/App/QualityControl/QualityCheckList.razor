@@ -1,0 +1,201 @@
+@page "/app/qc/checks"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.QualityControl.Application.DTOs
+@using SwiftApp.ERP.Modules.QualityControl.Application.Services
+@using SwiftApp.ERP.SharedKernel.Domain
+@attribute [Authorize(Policy = "QC:VIEW")]
+@rendermode InteractiveServer
+@inject QualityCheckService CheckService
+
+<PageTitle>Quality Checks — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-check2-circle me-2"></i>Quality Checks</h2>
+    <AuthorizeView Policy="QC:CREATE">
+        <a href="/app/qc/checks/new" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>New Check
+        </a>
+    </AuthorizeView>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" placeholder="Search checks..." @bind="_search" @bind:event="oninput" @bind:after="SearchChanged" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" @bind="_resultFilter" @bind:after="OnFilterChanged">
+                    <option value="">All Results</option>
+                    <option value="Pass">Pass</option>
+                    <option value="Fail">Fail</option>
+                    <option value="Conditional">Conditional</option>
+                </select>
+            </div>
+        </div>
+
+        @if (_loading)
+        {
+            <div class="text-center p-4"><div class="spinner-border text-primary" role="status"></div></div>
+        }
+        else if (_result is null || _result.Items.Count == 0)
+        {
+            <div class="alert alert-info">No quality checks found.</div>
+        }
+        else
+        {
+            <small class="text-muted d-block mb-2">Showing @((_page - 1) * PageSize + 1)–@(Math.Min(_page * PageSize, _result.TotalItems)) of @_result.TotalItems records</small>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th role="button" @onclick='() => ToggleSort("CheckNumber")'>Check # @SortIcon("CheckNumber")</th>
+                            <th>Plan #</th>
+                            <th role="button" @onclick='() => ToggleSort("InspectorName")'>Inspector @SortIcon("InspectorName")</th>
+                            <th role="button" @onclick='() => ToggleSort("CheckDate")'>Date @SortIcon("CheckDate")</th>
+                            <th role="button" @onclick='() => ToggleSort("Result")'>Result @SortIcon("Result")</th>
+                            <th>Batch</th>
+                            <th>Sample / Defects</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var check in _sorted)
+                        {
+                            <tr>
+                                <td><code>@check.CheckNumber</code></td>
+                                <td>@(check.PlanNumber ?? "—")</td>
+                                <td>@check.InspectorName</td>
+                                <td>@check.CheckDate.ToString("dd.MM.yyyy")</td>
+                                <td>
+                                    <span class="badge @ResultBadge(check.Result)">@check.Result</span>
+                                </td>
+                                <td>@(check.BatchNumber ?? "—")</td>
+                                <td>@check.SampleSize / @check.DefectCount</td>
+                                <td class="text-end">
+                                    <AuthorizeView Policy="QC:EDIT">
+                                        <a href="/app/qc/checks/edit/@check.Id" class="btn btn-sm btn-outline-primary me-1"><i class="bi bi-pencil"></i></a>
+                                    </AuthorizeView>
+                                    <AuthorizeView Policy="QC:DELETE">
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(check)"><i class="bi bi-trash"></i></button>
+                                    </AuthorizeView>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (_result.TotalPages > 1)
+            {
+                <nav>
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item @(_page <= 1 ? "disabled" : "")"><button class="page-link" @onclick="() => GoToPage(_page - 1)">Previous</button></li>
+                        @for (int i = 1; i <= _result.TotalPages; i++) { var pg = i; <li class="page-item @(pg == _page ? "active" : "")"><button class="page-link" @onclick="() => GoToPage(pg)">@pg</button></li> }
+                        <li class="page-item @(_page >= _result.TotalPages ? "disabled" : "")"><button class="page-link" @onclick="() => GoToPage(_page + 1)">Next</button></li>
+                    </ul>
+                </nav>
+            }
+        }
+    </div>
+</div>
+
+@if (_deleteTarget is not null)
+{
+    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,.5)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Delete</h5>
+                    <button type="button" class="btn-close" @onclick="CancelDelete"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Delete quality check <strong>@_deleteTarget.CheckNumber</strong>?</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+                    <button class="btn btn-danger" @onclick="ExecuteDelete" disabled="@_deleting">
+                        @if (_deleting) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private PagedResult<QualityCheckResponse>? _result;
+    private List<QualityCheckResponse> _sorted = [];
+    private string? _search;
+    private string _resultFilter = "";
+    private string _sortCol = "CheckNumber";
+    private bool _sortAsc;
+    private int _page = 1;
+    private const int PageSize = 20;
+    private bool _loading = true;
+    private QualityCheckResponse? _deleteTarget;
+    private bool _deleting;
+    private System.Timers.Timer? _debounceTimer;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true; StateHasChanged();
+        _result = await CheckService.GetPagedAsync(_page, PageSize, _search);
+        ApplyClientSort(); _loading = false;
+    }
+
+    private void ApplyClientSort()
+    {
+        if (_result is null) { _sorted = []; return; }
+        IEnumerable<QualityCheckResponse> items = _result.Items;
+        if (!string.IsNullOrEmpty(_resultFilter))
+            items = items.Where(c => c.Result.Equals(_resultFilter, StringComparison.OrdinalIgnoreCase));
+        _sorted = (_sortCol switch
+        {
+            "CheckNumber" => _sortAsc ? items.OrderBy(c => c.CheckNumber) : items.OrderByDescending(c => c.CheckNumber),
+            "InspectorName" => _sortAsc ? items.OrderBy(c => c.InspectorName) : items.OrderByDescending(c => c.InspectorName),
+            "CheckDate" => _sortAsc ? items.OrderBy(c => c.CheckDate) : items.OrderByDescending(c => c.CheckDate),
+            "Result" => _sortAsc ? items.OrderBy(c => c.Result) : items.OrderByDescending(c => c.Result),
+            _ => items
+        }).ToList();
+    }
+
+    private void ToggleSort(string col) { if (_sortCol == col) _sortAsc = !_sortAsc; else { _sortCol = col; _sortAsc = true; } ApplyClientSort(); }
+    private MarkupString SortIcon(string col) => new(_sortCol != col ? "<i class=\"bi bi-arrow-down-up text-muted small\"></i>" : _sortAsc ? "<i class=\"bi bi-sort-up\"></i>" : "<i class=\"bi bi-sort-down\"></i>");
+    private async Task OnFilterChanged() { _page = 1; ApplyClientSort(); await Task.CompletedTask; }
+
+    private void SearchChanged()
+    {
+        _debounceTimer?.Stop(); _debounceTimer?.Dispose();
+        _debounceTimer = new System.Timers.Timer(300);
+        _debounceTimer.Elapsed += async (_, _) => { _debounceTimer?.Stop(); _page = 1; await InvokeAsync(async () => { await LoadData(); StateHasChanged(); }); };
+        _debounceTimer.AutoReset = false; _debounceTimer.Start();
+    }
+
+    private async Task GoToPage(int page) { if (page < 1 || (_result is not null && page > _result.TotalPages)) return; _page = page; await LoadData(); }
+
+    private void ConfirmDelete(QualityCheckResponse check) => _deleteTarget = check;
+    private void CancelDelete() => _deleteTarget = null;
+
+    private async Task ExecuteDelete()
+    {
+        if (_deleteTarget is null) return;
+        _deleting = true;
+        try { await CheckService.DeleteAsync(_deleteTarget.Id); _deleteTarget = null; await LoadData(); }
+        finally { _deleting = false; }
+    }
+
+    private static string ResultBadge(string result) => result switch
+    {
+        "Pass" => "bg-success",
+        "Fail" => "bg-danger",
+        "Conditional" => "bg-warning text-dark",
+        _ => "bg-secondary"
+    };
+}

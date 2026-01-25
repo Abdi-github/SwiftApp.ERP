@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" msdata:Ordinal="0" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter</value></resheader>
+
+  <!-- Common Actions -->
+  <data name="common.create" xml:space="preserve"><value>Erstellen</value></data>
+  <data name="common.edit" xml:space="preserve"><value>Bearbeiten</value></data>
+  <data name="common.delete" xml:space="preserve"><value>Löschen</value></data>
+  <data name="common.save" xml:space="preserve"><value>Speichern</value></data>
+  <data name="common.cancel" xml:space="preserve"><value>Abbrechen</value></data>
+  <data name="common.search" xml:space="preserve"><value>Suchen</value></data>
+  <data name="common.back" xml:space="preserve"><value>Zurück</value></data>
+  <data name="common.yes" xml:space="preserve"><value>Ja</value></data>
+  <data name="common.no" xml:space="preserve"><value>Nein</value></data>
+  <data name="common.loading" xml:space="preserve"><value>Laden...</value></data>
+  <data name="common.noResults" xml:space="preserve"><value>Keine Ergebnisse gefunden.</value></data>
+  <data name="common.active" xml:space="preserve"><value>Aktiv</value></data>
+  <data name="common.inactive" xml:space="preserve"><value>Inaktiv</value></data>
+  <data name="common.actions" xml:space="preserve"><value>Aktionen</value></data>
+  <data name="common.previous" xml:space="preserve"><value>Zurück</value></data>
+  <data name="common.next" xml:space="preserve"><value>Weiter</value></data>
+  <data name="common.status" xml:space="preserve"><value>Status</value></data>
+  <data name="common.name" xml:space="preserve"><value>Name</value></data>
+  <data name="common.description" xml:space="preserve"><value>Beschreibung</value></data>
+  <data name="common.code" xml:space="preserve"><value>Code</value></data>
+  <data name="common.date" xml:space="preserve"><value>Datum</value></data>
+  <data name="common.notes" xml:space="preserve"><value>Notizen</value></data>
+  <data name="common.showing" xml:space="preserve"><value>Anzeige</value></data>
+  <data name="common.of" xml:space="preserve"><value>von</value></data>
+  <data name="common.records" xml:space="preserve"><value>Einträge</value></data>
+
+  <!-- Navigation -->
+  <data name="nav.dashboard" xml:space="preserve"><value>Dashboard</value></data>
+  <data name="nav.masterdata" xml:space="preserve"><value>Stammdaten</value></data>
+  <data name="nav.products" xml:space="preserve"><value>Produkte</value></data>
+  <data name="nav.materials" xml:space="preserve"><value>Materialien</value></data>
+  <data name="nav.categories" xml:space="preserve"><value>Kategorien</value></data>
+  <data name="nav.unitsOfMeasure" xml:space="preserve"><value>Masseinheiten</value></data>
+  <data name="nav.inventory" xml:space="preserve"><value>Lager</value></data>
+  <data name="nav.warehouses" xml:space="preserve"><value>Warenhäuser</value></data>
+  <data name="nav.stockLevels" xml:space="preserve"><value>Lagerbestände</value></data>
+  <data name="nav.stockMovements" xml:space="preserve"><value>Lagerbewegungen</value></data>
+  <data name="nav.sales" xml:space="preserve"><value>Verkauf</value></data>
+  <data name="nav.customers" xml:space="preserve"><value>Kunden</value></data>
+  <data name="nav.salesOrders" xml:space="preserve"><value>Verkaufsaufträge</value></data>
+  <data name="nav.purchasing" xml:space="preserve"><value>Einkauf</value></data>
+  <data name="nav.suppliers" xml:space="preserve"><value>Lieferanten</value></data>
+  <data name="nav.purchaseOrders" xml:space="preserve"><value>Bestellungen</value></data>
+  <data name="nav.production" xml:space="preserve"><value>Produktion</value></data>
+  <data name="nav.workCenters" xml:space="preserve"><value>Arbeitszentren</value></data>
+  <data name="nav.productionOrders" xml:space="preserve"><value>Produktionsaufträge</value></data>
+  <data name="nav.accounting" xml:space="preserve"><value>Buchhaltung</value></data>
+  <data name="nav.accounts" xml:space="preserve"><value>Konten</value></data>
+  <data name="nav.journalEntries" xml:space="preserve"><value>Buchungen</value></data>
+  <data name="nav.hr" xml:space="preserve"><value>Personal</value></data>
+  <data name="nav.departments" xml:space="preserve"><value>Abteilungen</value></data>
+  <data name="nav.employees" xml:space="preserve"><value>Mitarbeiter</value></data>
+  <data name="nav.crm" xml:space="preserve"><value>CRM</value></data>
+  <data name="nav.contacts" xml:space="preserve"><value>Kontakte</value></data>
+  <data name="nav.interactions" xml:space="preserve"><value>Interaktionen</value></data>
+  <data name="nav.qualityControl" xml:space="preserve"><value>Qualitätskontrolle</value></data>
+  <data name="nav.inspectionPlans" xml:space="preserve"><value>Prüfpläne</value></data>
+  <data name="nav.qualityChecks" xml:space="preserve"><value>Qualitätsprüfungen</value></data>
+  <data name="nav.ncrs" xml:space="preserve"><value>Abweichungsberichte</value></data>
+  <data name="nav.notifications" xml:space="preserve"><value>Benachrichtigungen</value></data>
+  <data name="nav.mailCampaigns" xml:space="preserve"><value>Mail-Kampagnen</value></data>
+  <data name="nav.admin" xml:space="preserve"><value>Verwaltung</value></data>
+  <data name="nav.users" xml:space="preserve"><value>Benutzer</value></data>
+  <data name="nav.roles" xml:space="preserve"><value>Rollen</value></data>
+
+  <!-- Auth -->
+  <data name="auth.login" xml:space="preserve"><value>Anmelden</value></data>
+  <data name="auth.logout" xml:space="preserve"><value>Abmelden</value></data>
+  <data name="auth.username" xml:space="preserve"><value>Benutzername</value></data>
+  <data name="auth.password" xml:space="preserve"><value>Passwort</value></data>
+  <data name="auth.loginTitle" xml:space="preserve"><value>Anmelden bei SwiftApp ERP</value></data>
+  <data name="auth.invalidCredentials" xml:space="preserve"><value>Ungültige Anmeldedaten.</value></data>
+
+  <!-- Errors -->
+  <data name="error.notFound" xml:space="preserve"><value>Seite nicht gefunden</value></data>
+  <data name="error.accessDenied" xml:space="preserve"><value>Zugriff verweigert</value></data>
+  <data name="error.serverError" xml:space="preserve"><value>Ein Fehler ist aufgetreten</value></data>
+  <data name="error.accessDeniedMsg" xml:space="preserve"><value>Sie haben keine Berechtigung auf diese Ressource zuzugreifen.</value></data>
+  <data name="error.notFoundMsg" xml:space="preserve"><value>Die gesuchte Seite existiert nicht oder wurde verschoben.</value></data>
+  <data name="error.serverErrorMsg" xml:space="preserve"><value>Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.</value></data>
+  <data name="error.retry" xml:space="preserve"><value>Erneut versuchen</value></data>
+</root>

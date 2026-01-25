@@ -1,0 +1,189 @@
+@page "/app/purchasing/suppliers/new"
+@page "/app/purchasing/suppliers/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Purchasing.Application.DTOs
+@using SwiftApp.ERP.Modules.Purchasing.Application.Services
+@attribute [Authorize(Policy = "PURCHASING:CREATE")]
+@rendermode InteractiveServer
+@inject SupplierService SupplierService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit Supplier" : "New Supplier") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-truck me-2"></i>@(_isEdit ? "Edit Supplier" : "New Supplier")</h2>
+    <a href="/app/purchasing/suppliers" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Suppliers
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="supplierForm">
+            <h5 class="mb-3">Company Information</h5>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Company Name</label>
+                    <InputText class="form-control" @bind-Value="_model.CompanyName" />
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">First Name</label>
+                    <InputText class="form-control" @bind-Value="_model.FirstName" />
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Last Name</label>
+                    <InputText class="form-control" @bind-Value="_model.LastName" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Email</label>
+                    <InputText class="form-control" type="email" @bind-Value="_model.Email" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Phone</label>
+                    <InputText class="form-control" @bind-Value="_model.Phone" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Contact Person</label>
+                    <InputText class="form-control" @bind-Value="_model.ContactPerson" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-8 mb-3">
+                    <label class="form-label">Website</label>
+                    <InputText class="form-control" @bind-Value="_model.Website" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">VAT Number</label>
+                    <InputText class="form-control" @bind-Value="_model.VatNumber" />
+                </div>
+            </div>
+
+            <h5 class="mb-3 mt-2">Address</h5>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Street</label>
+                    <InputText class="form-control" @bind-Value="_model.Street" />
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Postal Code</label>
+                    <InputText class="form-control" @bind-Value="_model.PostalCode" />
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">City</label>
+                    <InputText class="form-control" @bind-Value="_model.City" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Canton</label>
+                    <InputText class="form-control" @bind-Value="_model.Canton" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Country</label>
+                    <InputText class="form-control" @bind-Value="_model.Country" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Payment Terms (days)</label>
+                    <InputNumber class="form-control" @bind-Value="_model.PaymentTerms" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-9 mb-3">
+                    <label class="form-label">Notes</label>
+                    <InputTextArea class="form-control" rows="2" @bind-Value="_model.Notes" />
+                </div>
+                <div class="col-md-3 mb-3 d-flex align-items-end">
+                    <div class="form-check">
+                        <InputCheckbox class="form-check-input" @bind-Value="_model.Active" />
+                        <label class="form-check-label">Active</label>
+                    </div>
+                </div>
+            </div>
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/purchasing/suppliers" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private SupplierFormModel _model = new();
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            var s = await SupplierService.GetByIdAsync(Id!.Value);
+            if (s is null) { Navigation.NavigateTo("/app/purchasing/suppliers"); return; }
+            _model = new SupplierFormModel
+            {
+                CompanyName = s.CompanyName, FirstName = s.FirstName, LastName = s.LastName,
+                Email = s.Email, Phone = s.Phone, ContactPerson = s.ContactPerson, Website = s.Website,
+                Street = s.Street, City = s.City, PostalCode = s.PostalCode, Canton = s.Canton,
+                Country = s.Country, VatNumber = s.VatNumber, PaymentTerms = s.PaymentTerms,
+                Notes = s.Notes, Active = s.Active,
+            };
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            var request = new SupplierRequest(
+                null, _model.CompanyName, _model.FirstName, _model.LastName,
+                _model.Email, _model.Phone, _model.Street, _model.City,
+                _model.PostalCode, _model.Canton, _model.Country, _model.VatNumber,
+                _model.PaymentTerms, _model.ContactPerson, _model.Website,
+                _model.Notes, _model.Active);
+
+            if (_isEdit) await SupplierService.UpdateAsync(Id!.Value, request);
+            else await SupplierService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/purchasing/suppliers");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class SupplierFormModel
+    {
+        public string? CompanyName { get; set; }
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? Email { get; set; }
+        public string? Phone { get; set; }
+        public string? ContactPerson { get; set; }
+        public string? Website { get; set; }
+        public string? Street { get; set; }
+        public string? City { get; set; }
+        public string? PostalCode { get; set; }
+        public string? Canton { get; set; }
+        public string? Country { get; set; } = "CH";
+        public string? VatNumber { get; set; }
+        public int PaymentTerms { get; set; } = 30;
+        public string? Notes { get; set; }
+        public bool Active { get; set; } = true;
+    }
+}

@@ -1,0 +1,100 @@
+@page "/app/admin/roles"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Auth.Application.DTOs
+@using SwiftApp.ERP.Modules.Auth.Application.Services
+@attribute [Authorize(Policy = "ADMIN:USERS_MANAGE")]
+@rendermode InteractiveServer
+@inject RoleService RoleService
+
+<PageTitle>Role Management — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-shield-lock me-2"></i>Roles</h2>
+    <AuthorizeView Policy="ADMIN:USERS_MANAGE">
+        <a href="/app/admin/roles/new" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>New Role
+        </a>
+    </AuthorizeView>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        @if (_loading)
+        {
+            <div class="text-center p-4"><div class="spinner-border text-primary" role="status"></div></div>
+        }
+        else if (_roles is null || _roles.Count == 0)
+        {
+            <div class="alert alert-info">No roles found.</div>
+        }
+        else
+        {
+            <small class="text-muted d-block mb-2">@_sorted.Count roles</small>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th role="button" @onclick='() => ToggleSort("Name")'>Name @SortIcon("Name")</th>
+                            <th role="button" @onclick='() => ToggleSort("Description")'>Description @SortIcon("Description")</th>
+                            <th role="button" @onclick='() => ToggleSort("PermissionCount")'>Permissions @SortIcon("PermissionCount")</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var role in _sorted)
+                        {
+                            <tr>
+                                <td><span class="badge bg-primary fs-6">@role.Name</span></td>
+                                <td>@role.Description</td>
+                                <td>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        @foreach (var perm in role.Permissions.OrderBy(p => p.Code))
+                                        {
+                                            <span class="badge bg-secondary">@perm.Code</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td class="text-end">
+                                    <AuthorizeView Policy="ADMIN:USERS_MANAGE">
+                                        <a href="/app/admin/roles/edit/@role.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                                    </AuthorizeView>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private List<RoleResponse>? _roles;
+    private List<RoleResponse> _sorted = [];
+    private string _sortCol = "Name";
+    private bool _sortAsc = true;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        _roles = await RoleService.GetAllAsync();
+        ApplyClientSort();
+        _loading = false;
+    }
+
+    private void ApplyClientSort()
+    {
+        if (_roles is null) { _sorted = []; return; }
+        _sorted = (_sortCol switch
+        {
+            "Name" => _sortAsc ? _roles.OrderBy(r => r.Name) : _roles.OrderByDescending(r => r.Name),
+            "Description" => _sortAsc ? _roles.OrderBy(r => r.Description) : _roles.OrderByDescending(r => r.Description),
+            "PermissionCount" => _sortAsc ? _roles.OrderBy(r => r.Permissions.Count) : _roles.OrderByDescending(r => r.Permissions.Count),
+            _ => _roles.AsEnumerable()
+        }).ToList();
+    }
+
+    private void ToggleSort(string col) { if (_sortCol == col) _sortAsc = !_sortAsc; else { _sortCol = col; _sortAsc = true; } ApplyClientSort(); }
+    private MarkupString SortIcon(string col) => new(_sortCol != col ? "<i class=\"bi bi-arrow-down-up text-muted small\"></i>" : _sortAsc ? "<i class=\"bi bi-sort-up\"></i>" : "<i class=\"bi bi-sort-down\"></i>");
+}

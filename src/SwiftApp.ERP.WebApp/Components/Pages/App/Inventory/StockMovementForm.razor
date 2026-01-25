@@ -1,0 +1,147 @@
+@page "/app/inventory/stock-movements/new"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Inventory.Application.DTOs
+@using SwiftApp.ERP.Modules.Inventory.Application.Services
+@using SwiftApp.ERP.Modules.Inventory.Domain.Enums
+@attribute [Authorize(Policy = "INVENTORY:CREATE")]
+@rendermode InteractiveServer
+@inject StockService StockService
+@inject WarehouseService WarehouseService
+@inject NavigationManager Navigation
+
+<PageTitle>New Stock Movement — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-arrow-left-right me-2"></i>New Stock Movement</h2>
+    <a href="/app/inventory/stock-movements" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Movements
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="stockMovementForm">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Movement Type <span class="text-danger">*</span></label>
+                    <InputSelect class="form-select" @bind-Value="_model.MovementType">
+                        @foreach (var t in Enum.GetValues<MovementType>())
+                        {
+                            <option value="@t">@t</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Item Type <span class="text-danger">*</span></label>
+                    <InputSelect class="form-select" @bind-Value="_model.ItemType">
+                        @foreach (var t in Enum.GetValues<StockItemType>())
+                        {
+                            <option value="@t">@t</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Item ID <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.ItemId" placeholder="Enter item GUID" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Source Warehouse</label>
+                    <InputSelect class="form-select" @bind-Value="_model.SourceWarehouseId">
+                        <option value="">— None —</option>
+                        @foreach (var w in _warehouses)
+                        {
+                            <option value="@w.Id">@w.Code — @w.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Target Warehouse</label>
+                    <InputSelect class="form-select" @bind-Value="_model.TargetWarehouseId">
+                        <option value="">— None —</option>
+                        @foreach (var w in _warehouses)
+                        {
+                            <option value="@w.Id">@w.Code — @w.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Quantity <span class="text-danger">*</span></label>
+                    <InputNumber class="form-control" @bind-Value="_model.Quantity" />
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Reason</label>
+                <InputTextArea class="form-control" rows="2" @bind-Value="_model.Reason" />
+            </div>
+
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>Record Movement
+                </button>
+                <a href="/app/inventory/stock-movements" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private StockMovementFormModel _model = new();
+    private List<WarehouseResponse> _warehouses = [];
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var warehouseResult = await WarehouseService.GetPagedAsync(1, 200);
+        _warehouses = warehouseResult.Items.ToList();
+    }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            if (!Guid.TryParse(_model.ItemId, out var itemId))
+            {
+                _error = "Please enter a valid Item ID."; _saving = false; return;
+            }
+
+            var request = new StockMovementRequest(
+                _model.MovementType.ToString(),
+                itemId,
+                _model.ItemType.ToString(),
+                string.IsNullOrEmpty(_model.SourceWarehouseId) ? null : Guid.Parse(_model.SourceWarehouseId),
+                string.IsNullOrEmpty(_model.TargetWarehouseId) ? null : Guid.Parse(_model.TargetWarehouseId),
+                _model.Quantity,
+                _model.Reason);
+
+            await StockService.RecordMovementAsync(request);
+            Navigation.NavigateTo("/app/inventory/stock-movements");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class StockMovementFormModel
+    {
+        public MovementType MovementType { get; set; } = MovementType.GoodsReceipt;
+        public StockItemType ItemType { get; set; } = StockItemType.Product;
+        public string? ItemId { get; set; }
+        public string? SourceWarehouseId { get; set; }
+        public string? TargetWarehouseId { get; set; }
+        public decimal Quantity { get; set; }
+        public string? Reason { get; set; }
+    }
+}

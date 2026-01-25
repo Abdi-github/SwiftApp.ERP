@@ -1,0 +1,193 @@
+@page "/app/masterdata/products"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.MasterData.Application.DTOs
+@using SwiftApp.ERP.Modules.MasterData.Application.Services
+@using SwiftApp.ERP.SharedKernel.Domain
+@attribute [Authorize(Policy = "MASTERDATA:VIEW")]
+@rendermode InteractiveServer
+@inject ProductService ProductService
+
+<PageTitle>Products — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-watch me-2"></i>Products</h2>
+    <AuthorizeView Policy="MASTERDATA:CREATE">
+        <a href="/app/masterdata/products/new" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>New Product
+        </a>
+    </AuthorizeView>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" placeholder="Search products..." @bind="_search" @bind:event="oninput" @bind:after="SearchChanged" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" @bind="_activeFilter" @bind:after="OnFilterChanged">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+        </div>
+
+        @if (_loading)
+        {
+            <div class="text-center p-4"><div class="spinner-border text-primary" role="status"></div></div>
+        }
+        else if (_result is null || _displayItems.Count == 0)
+        {
+            <div class="alert alert-info">No products found.</div>
+        }
+        else
+        {
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <small class="text-muted">Showing @_displayItems.Count of @_result.TotalItems records</small>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th role="button" @onclick='() => Sort("Sku")'>SKU @SortIcon("Sku")</th>
+                            <th role="button" @onclick='() => Sort("Name")'>Name @SortIcon("Name")</th>
+                            <th role="button" @onclick='() => Sort("CategoryName")'>Category @SortIcon("CategoryName")</th>
+                            <th class="text-end" role="button" @onclick='() => Sort("UnitPrice")'>Unit Price @SortIcon("UnitPrice")</th>
+                            <th class="text-end" role="button" @onclick='() => Sort("ListPrice")'>List Price @SortIcon("ListPrice")</th>
+                            <th>VAT</th>
+                            <th>Active</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in _displayItems)
+                        {
+                            <tr>
+                                <td><code>@p.Sku</code></td>
+                                <td>@p.Name</td>
+                                <td>@(p.CategoryName ?? "—")</td>
+                                <td class="text-end">CHF @p.UnitPrice.ToString("N2")</td>
+                                <td class="text-end">CHF @p.ListPrice.ToString("N2")</td>
+                                <td><span class="badge bg-secondary">@p.VatRate</span></td>
+                                <td>
+                                    @if (p.Active)
+                                    {<span class="badge bg-success">Active</span>}
+                                    else
+                                    {<span class="badge bg-danger">Inactive</span>}
+                                </td>
+                                <td class="text-end">
+                                    <a href="/app/masterdata/products/@p.Id/bom" class="btn btn-sm btn-outline-info me-1" title="Bill of Materials"><i class="bi bi-diagram-3"></i></a>
+                                    <AuthorizeView Policy="MASTERDATA:EDIT">
+                                        <a href="/app/masterdata/products/edit/@p.Id" class="btn btn-sm btn-outline-primary me-1"><i class="bi bi-pencil"></i></a>
+                                    </AuthorizeView>
+                                    <AuthorizeView Policy="MASTERDATA:DELETE">
+                                        <a href="/app/masterdata/products/delete/@p.Id" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></a>
+                                    </AuthorizeView>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <nav>
+                <ul class="pagination justify-content-center">
+                    <li class="page-item @(_page <= 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => GoToPage(_page - 1)">Previous</button>
+                    </li>
+                    @for (int i = 1; i <= _result.TotalPages; i++)
+                    {
+                        var pg = i;
+                        <li class="page-item @(pg == _page ? "active" : "")">
+                            <button class="page-link" @onclick="() => GoToPage(pg)">@pg</button>
+                        </li>
+                    }
+                    <li class="page-item @(_page >= _result.TotalPages ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => GoToPage(_page + 1)">Next</button>
+                    </li>
+                </ul>
+            </nav>
+        }
+    </div>
+</div>
+
+@code {
+    private PagedResult<ProductResponse>? _result;
+    private List<ProductResponse> _displayItems = [];
+    private string? _search;
+    private string _activeFilter = "";
+    private string _sortColumn = "Name";
+    private bool _sortAsc = true;
+    private int _page = 1;
+    private const int PageSize = 20;
+    private bool _loading = true;
+    private System.Timers.Timer? _debounceTimer;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        StateHasChanged();
+        _result = await ProductService.GetPagedAsync(_page, PageSize, _search);
+        ApplyClientFilters();
+        _loading = false;
+    }
+
+    private void ApplyClientFilters()
+    {
+        if (_result is null) { _displayItems = []; return; }
+        IEnumerable<ProductResponse> items = _result.Items;
+        if (_activeFilter == "active") items = items.Where(p => p.Active);
+        else if (_activeFilter == "inactive") items = items.Where(p => !p.Active);
+        _displayItems = ApplySort(items).ToList();
+    }
+
+    private IEnumerable<ProductResponse> ApplySort(IEnumerable<ProductResponse> items) => _sortColumn switch
+    {
+        "Sku" => _sortAsc ? items.OrderBy(p => p.Sku) : items.OrderByDescending(p => p.Sku),
+        "Name" => _sortAsc ? items.OrderBy(p => p.Name) : items.OrderByDescending(p => p.Name),
+        "CategoryName" => _sortAsc ? items.OrderBy(p => p.CategoryName) : items.OrderByDescending(p => p.CategoryName),
+        "UnitPrice" => _sortAsc ? items.OrderBy(p => p.UnitPrice) : items.OrderByDescending(p => p.UnitPrice),
+        "ListPrice" => _sortAsc ? items.OrderBy(p => p.ListPrice) : items.OrderByDescending(p => p.ListPrice),
+        _ => items
+    };
+
+    private void Sort(string column)
+    {
+        if (_sortColumn == column) _sortAsc = !_sortAsc;
+        else { _sortColumn = column; _sortAsc = true; }
+        ApplyClientFilters();
+    }
+
+    private MarkupString SortIcon(string column) =>
+        _sortColumn != column ? new("⇅") : new(_sortAsc ? "↑" : "↓");
+
+    private async Task OnFilterChanged() { _page = 1; await LoadData(); }
+
+    private void SearchChanged()
+    {
+        _debounceTimer?.Stop();
+        _debounceTimer?.Dispose();
+        _debounceTimer = new System.Timers.Timer(300);
+        _debounceTimer.Elapsed += async (_, _) =>
+        {
+            _debounceTimer?.Stop();
+            _page = 1;
+            await InvokeAsync(async () => { await LoadData(); StateHasChanged(); });
+        };
+        _debounceTimer.AutoReset = false;
+        _debounceTimer.Start();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page < 1 || (_result is not null && page > _result.TotalPages)) return;
+        _page = page;
+        await LoadData();
+    }
+}

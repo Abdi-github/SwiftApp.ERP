@@ -1,0 +1,169 @@
+@page "/app/crm/contacts/new"
+@page "/app/crm/contacts/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Crm.Application.DTOs
+@using SwiftApp.ERP.Modules.Crm.Application.Services
+@attribute [Authorize(Policy = "CRM:CREATE")]
+@rendermode InteractiveServer
+@inject ContactService ContactService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit Contact" : "New Contact") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-person-lines-fill me-2"></i>@(_isEdit ? "Edit Contact" : "New Contact")</h2>
+    <a href="/app/crm/contacts" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Contacts
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="contactForm">
+            <h5 class="mb-3">Contact Information</h5>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">First Name</label>
+                    <InputText class="form-control" @bind-Value="_model.FirstName" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Last Name</label>
+                    <InputText class="form-control" @bind-Value="_model.LastName" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Company</label>
+                    <InputText class="form-control" @bind-Value="_model.Company" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Position</label>
+                    <InputText class="form-control" @bind-Value="_model.Position" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Email</label>
+                    <InputText class="form-control" type="email" @bind-Value="_model.Email" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Phone</label>
+                    <InputText class="form-control" @bind-Value="_model.Phone" />
+                </div>
+            </div>
+
+            <h5 class="mt-4 mb-3">Address</h5>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Street</label>
+                    <InputText class="form-control" @bind-Value="_model.Street" />
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Postal Code</label>
+                    <InputText class="form-control" @bind-Value="_model.PostalCode" />
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">City</label>
+                    <InputText class="form-control" @bind-Value="_model.City" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Canton</label>
+                    <InputText class="form-control" @bind-Value="_model.Canton" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Country</label>
+                    <InputText class="form-control" @bind-Value="_model.Country" />
+                </div>
+            </div>
+
+            <h5 class="mt-4 mb-3">Additional</h5>
+            <div class="mb-3">
+                <label class="form-label">Notes</label>
+                <InputTextArea class="form-control" rows="3" @bind-Value="_model.Notes" />
+            </div>
+            <div class="form-check mb-3">
+                <InputCheckbox class="form-check-input" @bind-Value="_model.Active" />
+                <label class="form-check-label">Active</label>
+            </div>
+
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/crm/contacts" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private ContactFormModel _model = new();
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            var c = await ContactService.GetByIdAsync(Id!.Value);
+            if (c is null) { Navigation.NavigateTo("/app/crm/contacts"); return; }
+            _model = new ContactFormModel
+            {
+                FirstName = c.FirstName, LastName = c.LastName, Email = c.Email, Phone = c.Phone,
+                Company = c.Company, Position = c.Position, Street = c.Street, City = c.City,
+                PostalCode = c.PostalCode, Canton = c.Canton, Country = c.Country,
+                Notes = c.Notes, Active = c.Active,
+            };
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            var request = new ContactRequest(
+                _model.FirstName, _model.LastName, _model.Email, _model.Phone,
+                _model.Company, _model.Position, _model.Street, _model.City,
+                _model.PostalCode, _model.Canton, _model.Country,
+                null, _model.Notes, _model.Active);
+
+            if (_isEdit) await ContactService.UpdateAsync(Id!.Value, request);
+            else await ContactService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/crm/contacts");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class ContactFormModel
+    {
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? Email { get; set; }
+        public string? Phone { get; set; }
+        public string? Company { get; set; }
+        public string? Position { get; set; }
+        public string? Street { get; set; }
+        public string? City { get; set; }
+        public string? PostalCode { get; set; }
+        public string? Canton { get; set; }
+        public string? Country { get; set; } = "CH";
+        public string? Notes { get; set; }
+        public bool Active { get; set; } = true;
+    }
+}

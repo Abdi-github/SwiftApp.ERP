@@ -1,0 +1,176 @@
+@page "/app/masterdata/materials/new"
+@page "/app/masterdata/materials/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.MasterData.Application.DTOs
+@using SwiftApp.ERP.Modules.MasterData.Application.Services
+@using SwiftApp.ERP.SharedKernel.Domain
+@attribute [Authorize(Policy = "MASTERDATA:CREATE")]
+@rendermode InteractiveServer
+@inject MaterialService MaterialService
+@inject CategoryService CategoryService
+@inject UnitOfMeasureService UomService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit Material" : "New Material") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-gem me-2"></i>@(_isEdit ? "Edit Material" : "New Material")</h2>
+    <a href="/app/masterdata/materials" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Materials
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="materialForm">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">SKU <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.Sku" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Name <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.Name" />
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Description</label>
+                <InputTextArea class="form-control" rows="3" @bind-Value="_model.Description" />
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Category</label>
+                    <InputSelect class="form-select" @bind-Value="_model.CategoryId">
+                        <option value="">— None —</option>
+                        @foreach (var c in _categories)
+                        {
+                            <option value="@c.Id">@c.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Unit of Measure</label>
+                    <InputSelect class="form-select" @bind-Value="_model.UnitOfMeasureId">
+                        <option value="">— None —</option>
+                        @foreach (var u in _uoms)
+                        {
+                            <option value="@u.Id">@u.Code — @u.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Unit Price (CHF) <span class="text-danger">*</span></label>
+                    <InputNumber class="form-control" @bind-Value="_model.UnitPrice" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">VAT Rate <span class="text-danger">*</span></label>
+                    <InputSelect class="form-select" @bind-Value="_model.VatRate">
+                        @foreach (var v in Enum.GetValues<VatRate>())
+                        {
+                            <option value="@v">@v</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Minimum Stock</label>
+                    <InputNumber class="form-control" @bind-Value="_model.MinimumStock" />
+                </div>
+                <div class="col-md-4 mb-3 d-flex align-items-end">
+                    <div class="form-check">
+                        <InputCheckbox class="form-check-input" @bind-Value="_model.Active" />
+                        <label class="form-check-label">Active</label>
+                    </div>
+                </div>
+            </div>
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/masterdata/materials" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private MaterialFormModel _model = new();
+    private List<CategoryResponse> _categories = [];
+    private List<UnitOfMeasureResponse> _uoms = [];
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _categories = await CategoryService.GetAllAsync();
+        _uoms = await UomService.GetAllAsync();
+
+        if (_isEdit)
+        {
+            var material = await MaterialService.GetByIdAsync(Id!.Value);
+            if (material is null) { Navigation.NavigateTo("/app/masterdata/materials"); return; }
+            _model = new MaterialFormModel
+            {
+                Sku = material.Sku,
+                Name = material.Name,
+                Description = material.Description,
+                CategoryId = material.CategoryId?.ToString() ?? "",
+                UnitOfMeasureId = material.UnitOfMeasureId?.ToString() ?? "",
+                UnitPrice = material.UnitPrice,
+                VatRate = Enum.TryParse<VatRate>(material.VatRate, out var vr) ? vr : VatRate.Standard,
+                MinimumStock = material.MinimumStock,
+                Active = material.Active,
+            };
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true;
+        _error = null;
+        try
+        {
+            Guid? categoryId = Guid.TryParse(_model.CategoryId, out var cid) ? cid : null;
+            Guid? uomId = Guid.TryParse(_model.UnitOfMeasureId, out var uid) ? uid : null;
+            var request = new MaterialRequest(
+                _model.Sku, _model.Name, _model.Description, categoryId, uomId,
+                _model.UnitPrice, _model.VatRate, _model.MinimumStock, _model.Active, null, null);
+
+            if (_isEdit)
+                await MaterialService.UpdateAsync(Id!.Value, request);
+            else
+                await MaterialService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/masterdata/materials");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class MaterialFormModel
+    {
+        public string Sku { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public string CategoryId { get; set; } = "";
+        public string UnitOfMeasureId { get; set; } = "";
+        public decimal UnitPrice { get; set; }
+        public VatRate VatRate { get; set; } = VatRate.Standard;
+        public decimal MinimumStock { get; set; }
+        public bool Active { get; set; } = true;
+    }
+}

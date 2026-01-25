@@ -1,0 +1,244 @@
+@page "/app/inventory/stock"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Inventory.Application.DTOs
+@using SwiftApp.ERP.Modules.Inventory.Application.Services
+@using SwiftApp.ERP.Modules.MasterData.Domain.Interfaces
+@using SwiftApp.ERP.SharedKernel.Domain
+@attribute [Authorize(Policy = "INVENTORY:VIEW")]
+@rendermode InteractiveServer
+@inject StockService StockService
+@inject IMasterDataModuleApi MasterDataApi
+
+<PageTitle>Stock Levels — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-boxes me-2"></i>Stock Levels</h2>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" placeholder="Search stock levels..." @bind="_search" @bind:event="oninput" @bind:after="SearchChanged" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" @bind="_typeFilter" @bind:after="OnFilterChanged">
+                    <option value="">All Types</option>
+                    <option value="Product">Product</option>
+                    <option value="Material">Material</option>
+                </select>
+            </div>
+        </div>
+
+        @if (_loading)
+        {
+            <div class="text-center p-4"><div class="spinner-border text-primary" role="status"></div></div>
+        }
+        else if (_result is null || _filteredItems.Count == 0)
+        {
+            <div class="alert alert-info">No stock levels found.</div>
+        }
+        else
+        {
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <small class="text-muted">Showing @_filteredItems.Count of @_result.TotalItems records</small>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th role="button" @onclick='() => Sort("ItemType")'>
+                                Item Type @SortIcon("ItemType")
+                            </th>
+                            <th role="button" @onclick='() => Sort("ItemName")'>
+                                Item Name @SortIcon("ItemName")
+                            </th>
+                            <th role="button" @onclick='() => Sort("WarehouseName")'>
+                                Warehouse @SortIcon("WarehouseName")
+                            </th>
+                            <th class="text-end" role="button" @onclick='() => Sort("QuantityOnHand")'>
+                                Qty On Hand @SortIcon("QuantityOnHand")
+                            </th>
+                            <th class="text-end" role="button" @onclick='() => Sort("QuantityReserved")'>
+                                Qty Reserved @SortIcon("QuantityReserved")
+                            </th>
+                            <th class="text-end" role="button" @onclick='() => Sort("QuantityAvailable")'>
+                                Qty Available @SortIcon("QuantityAvailable")
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in _filteredItems)
+                        {
+                            <tr class="@(s.QuantityAvailable < 10 ? "table-warning" : "")">
+                                <td><span class="badge @(s.ItemType == "Product" ? "bg-primary" : "bg-info")">@s.ItemType</span></td>
+                                <td>@(string.IsNullOrEmpty(s.ItemName) ? s.ItemId.ToString()[..8] + "…" : s.ItemName)</td>
+                                <td>@s.WarehouseCode — @s.WarehouseName</td>
+                                <td class="text-end">@s.QuantityOnHand.ToString("N0")</td>
+                                <td class="text-end">@s.QuantityReserved.ToString("N0")</td>
+                                <td class="text-end fw-bold">@s.QuantityAvailable.ToString("N0")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @* Pagination *@
+            <nav>
+                <ul class="pagination justify-content-center">
+                    <li class="page-item @(_page <= 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => GoToPage(_page - 1)">Previous</button>
+                    </li>
+                    @for (int i = 1; i <= _totalPages; i++)
+                    {
+                        var pg = i;
+                        <li class="page-item @(pg == _page ? "active" : "")">
+                            <button class="page-link" @onclick="() => GoToPage(pg)">@pg</button>
+                        </li>
+                    }
+                    <li class="page-item @(_page >= _totalPages ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => GoToPage(_page + 1)">Next</button>
+                    </li>
+                </ul>
+            </nav>
+        }
+    </div>
+</div>
+
+@code {
+    private PagedResult<StockLevelResponse>? _result;
+    private List<StockLevelResponse> _filteredItems = [];
+    private string? _search;
+    private string _typeFilter = "";
+    private string _sortColumn = "ItemName";
+    private bool _sortAsc = true;
+    private int _page = 1;
+    private int _totalPages = 1;
+    private const int PageSize = 20;
+    private bool _loading = true;
+    private System.Timers.Timer? _debounceTimer;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        StateHasChanged();
+        _result = await StockService.GetStockLevelsPagedAsync(_page, PageSize);
+        await ResolveItemNames();
+        ApplyClientFilter();
+        _loading = false;
+    }
+
+    private async Task ResolveItemNames()
+    {
+        if (_result is null) return;
+        var resolved = new List<StockLevelResponse>();
+        foreach (var item in _result.Items)
+        {
+            var name = item.ItemName;
+            if (string.IsNullOrEmpty(name))
+            {
+                if (item.ItemType == "Product")
+                {
+                    var product = await MasterDataApi.FindProductByIdAsync(item.ItemId);
+                    name = product?.Name ?? $"Product {item.ItemId.ToString()[..8]}";
+                }
+                else
+                {
+                    var material = await MasterDataApi.FindMaterialByIdAsync(item.ItemId);
+                    name = material?.Name ?? $"Material {item.ItemId.ToString()[..8]}";
+                }
+            }
+            resolved.Add(item with { ItemName = name });
+        }
+        _result = new PagedResult<StockLevelResponse>(resolved, _result.Page, _result.PageSize, _result.TotalItems, _result.TotalPages);
+    }
+
+    private void ApplyClientFilter()
+    {
+        if (_result is null)
+        {
+            _filteredItems = [];
+            _totalPages = 1;
+            return;
+        }
+
+        IEnumerable<StockLevelResponse> items = _result.Items;
+
+        if (!string.IsNullOrWhiteSpace(_typeFilter))
+            items = items.Where(s => s.ItemType.Equals(_typeFilter, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrWhiteSpace(_search))
+            items = items.Where(s =>
+                s.WarehouseCode.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                || s.WarehouseName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                || s.ItemType.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                || s.ItemName.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+        _filteredItems = ApplySort(items).ToList();
+        _totalPages = _result.TotalPages;
+    }
+
+    private IEnumerable<StockLevelResponse> ApplySort(IEnumerable<StockLevelResponse> items) => _sortColumn switch
+    {
+        "ItemType" => _sortAsc ? items.OrderBy(s => s.ItemType) : items.OrderByDescending(s => s.ItemType),
+        "ItemName" => _sortAsc ? items.OrderBy(s => s.ItemName) : items.OrderByDescending(s => s.ItemName),
+        "WarehouseName" => _sortAsc ? items.OrderBy(s => s.WarehouseName) : items.OrderByDescending(s => s.WarehouseName),
+        "QuantityOnHand" => _sortAsc ? items.OrderBy(s => s.QuantityOnHand) : items.OrderByDescending(s => s.QuantityOnHand),
+        "QuantityReserved" => _sortAsc ? items.OrderBy(s => s.QuantityReserved) : items.OrderByDescending(s => s.QuantityReserved),
+        "QuantityAvailable" => _sortAsc ? items.OrderBy(s => s.QuantityAvailable) : items.OrderByDescending(s => s.QuantityAvailable),
+        _ => items
+    };
+
+    private void Sort(string column)
+    {
+        if (_sortColumn == column)
+            _sortAsc = !_sortAsc;
+        else
+        {
+            _sortColumn = column;
+            _sortAsc = true;
+        }
+        ApplyClientFilter();
+    }
+
+    private MarkupString SortIcon(string column)
+    {
+        if (_sortColumn != column) return new("<i class=\"bi bi-arrow-down-up text-muted small\"></i>");
+        return _sortAsc
+            ? new("<i class=\"bi bi-sort-up\"></i>")
+            : new("<i class=\"bi bi-sort-down\"></i>");
+    }
+
+    private async Task OnFilterChanged()
+    {
+        _page = 1;
+        await LoadData();
+    }
+
+    private void SearchChanged()
+    {
+        _debounceTimer?.Stop();
+        _debounceTimer?.Dispose();
+        _debounceTimer = new System.Timers.Timer(300);
+        _debounceTimer.Elapsed += async (_, _) =>
+        {
+            _debounceTimer?.Stop();
+            _page = 1;
+            await InvokeAsync(async () => { await LoadData(); StateHasChanged(); });
+        };
+        _debounceTimer.AutoReset = false;
+        _debounceTimer.Start();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page < 1 || page > _totalPages) return;
+        _page = page;
+        await LoadData();
+    }
+}

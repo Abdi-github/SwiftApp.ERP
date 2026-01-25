@@ -1,0 +1,158 @@
+@page "/app/admin/users/new"
+@page "/app/admin/users/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Auth.Application.DTOs
+@using SwiftApp.ERP.Modules.Auth.Application.Services
+@attribute [Authorize(Policy = "ADMIN:USERS_MANAGE")]
+@rendermode InteractiveServer
+@inject UserService UserService
+@inject RoleService RoleService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit User" : "New User") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-person-badge me-2"></i>@(_isEdit ? "Edit User" : "New User")</h2>
+    <a href="/app/admin/users" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Users
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="userForm">
+            <h5 class="mb-3">Account</h5>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Username <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.Username" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Email <span class="text-danger">*</span></label>
+                    <InputText class="form-control" type="email" @bind-Value="_model.Email" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Password @(!_isEdit ? " *" : " (leave blank to keep)")</label>
+                    <InputText class="form-control" type="password" @bind-Value="_model.Password" />
+                </div>
+            </div>
+
+            <h5 class="mt-4 mb-3">Profile</h5>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">First Name <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.FirstName" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Last Name <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.LastName" />
+                </div>
+                <div class="col-md-4 mb-3 d-flex align-items-end">
+                    <div class="form-check">
+                        <InputCheckbox class="form-check-input" @bind-Value="_model.Enabled" />
+                        <label class="form-check-label">Enabled</label>
+                    </div>
+                </div>
+            </div>
+
+            <h5 class="mt-4 mb-3">Roles</h5>
+            <div class="row">
+                @foreach (var role in _allRoles)
+                {
+                    <div class="col-md-3 mb-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="@($"role-{role.Name}")"
+                                   checked="@_selectedRoles.Contains(role.Name)"
+                                   @onchange="(e) => ToggleRole(role.Name, (bool)(e.Value ?? false))" />
+                            <label class="form-check-label" for="@($"role-{role.Name}")">
+                                <span class="badge bg-primary">@role.Name</span>
+                            </label>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/admin/users" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private UserFormModel _model = new();
+    private List<RoleResponse> _allRoles = [];
+    private HashSet<string> _selectedRoles = [];
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _allRoles = await RoleService.GetAllAsync();
+
+        if (_isEdit)
+        {
+            var user = await UserService.GetByIdAsync(Id!.Value);
+            if (user is null) { Navigation.NavigateTo("/app/admin/users"); return; }
+            _model = new UserFormModel
+            {
+                Username = user.Username, Email = user.Email,
+                FirstName = user.FirstName, LastName = user.LastName,
+                Enabled = user.Enabled,
+            };
+            _selectedRoles = [.. user.Roles];
+        }
+    }
+
+    private void ToggleRole(string role, bool selected)
+    {
+        if (selected) _selectedRoles.Add(role);
+        else _selectedRoles.Remove(role);
+    }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            var request = new UserRequest(
+                _model.Username, _model.Email,
+                string.IsNullOrWhiteSpace(_model.Password) ? null : _model.Password,
+                _model.FirstName, _model.LastName, _model.Enabled,
+                _selectedRoles.Count > 0 ? _selectedRoles.AsReadOnly() : null);
+
+            if (_isEdit) await UserService.UpdateAsync(Id!.Value, request);
+            else await UserService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/admin/users");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class UserFormModel
+    {
+        public string Username { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string? Password { get; set; }
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
+        public bool Enabled { get; set; } = true;
+    }
+}

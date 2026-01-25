@@ -1,0 +1,125 @@
+@page "/app/notifications/campaigns"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Notification.Application.DTOs
+@using SwiftApp.ERP.Modules.Notification.Application.Services
+@using SwiftApp.ERP.SharedKernel.Domain
+@attribute [Authorize(Policy = "NOTIFICATION:MANAGE")]
+@rendermode InteractiveServer
+@inject MailCampaignService CampaignService
+
+<PageTitle>Mail Campaigns — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-megaphone me-2"></i>Mail Campaigns</h2>
+    <a href="/app/notifications/campaigns/new" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i>New Campaign
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        @if (_loading)
+        {
+            <div class="text-center p-4"><div class="spinner-border text-primary" role="status"></div></div>
+        }
+        else if (_result is null || _result.Items.Count == 0)
+        {
+            <div class="alert alert-info">No mail campaigns found.</div>
+        }
+        else
+        {
+            <small class="text-muted d-block mb-2">Showing @((_page - 1) * PageSize + 1)–@(Math.Min(_page * PageSize, _result.TotalItems)) of @_result.TotalItems records</small>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th role="button" @onclick='() => ToggleSort("Name")'>Name @SortIcon("Name")</th>
+                            <th>Template</th>
+                            <th>Segment</th>
+                            <th role="button" @onclick='() => ToggleSort("Status")'>Status @SortIcon("Status")</th>
+                            <th>Recipients</th>
+                            <th>Sent / Failed</th>
+                            <th role="button" @onclick='() => ToggleSort("ScheduledAt")'>Scheduled @SortIcon("ScheduledAt")</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in _sorted)
+                        {
+                            <tr>
+                                <td>@c.Name</td>
+                                <td><code>@(c.TemplateCode ?? "—")</code></td>
+                                <td>@(c.TargetSegment ?? "all")</td>
+                                <td><span class="badge @GetStatusBadge(c.Status)">@c.Status</span></td>
+                                <td class="text-end">@c.TotalRecipients</td>
+                                <td class="text-end">
+                                    <span class="text-success">@c.SentCount</span> / <span class="text-danger">@c.FailedCount</span>
+                                </td>
+                                <td>@(c.ScheduledAt?.ToString("dd.MM.yyyy HH:mm") ?? "—")</td>
+                                <td>@c.CreatedAt.ToString("dd.MM.yyyy")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (_result.TotalPages > 1)
+            {
+                <nav>
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item @(_page <= 1 ? "disabled" : "")"><button class="page-link" @onclick="() => GoToPage(_page - 1)">Previous</button></li>
+                        @for (int p = 1; p <= _result.TotalPages; p++) { var pg = p; <li class="page-item @(pg == _page ? "active" : "")"><button class="page-link" @onclick="() => GoToPage(pg)">@pg</button></li> }
+                        <li class="page-item @(_page >= _result.TotalPages ? "disabled" : "")"><button class="page-link" @onclick="() => GoToPage(_page + 1)">Next</button></li>
+                    </ul>
+                </nav>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private PagedResult<MailCampaignResponse>? _result;
+    private List<MailCampaignResponse> _sorted = [];
+    private string _sortCol = "ScheduledAt";
+    private bool _sortAsc;
+    private int _page = 1;
+    private const int PageSize = 20;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true; StateHasChanged();
+        _result = await CampaignService.GetPagedAsync(_page, PageSize, default);
+        ApplyClientSort(); _loading = false;
+    }
+
+    private void ApplyClientSort()
+    {
+        if (_result is null) { _sorted = []; return; }
+        _sorted = (_sortCol switch
+        {
+            "Name" => _sortAsc ? _result.Items.OrderBy(c => c.Name) : _result.Items.OrderByDescending(c => c.Name),
+            "Status" => _sortAsc ? _result.Items.OrderBy(c => c.Status) : _result.Items.OrderByDescending(c => c.Status),
+            "ScheduledAt" => _sortAsc ? _result.Items.OrderBy(c => c.ScheduledAt) : _result.Items.OrderByDescending(c => c.ScheduledAt),
+            _ => _result.Items.AsEnumerable()
+        }).ToList();
+    }
+
+    private void ToggleSort(string col) { if (_sortCol == col) _sortAsc = !_sortAsc; else { _sortCol = col; _sortAsc = true; } ApplyClientSort(); }
+    private MarkupString SortIcon(string col) => new(_sortCol != col ? "<i class=\"bi bi-arrow-down-up text-muted small\"></i>" : _sortAsc ? "<i class=\"bi bi-sort-up\"></i>" : "<i class=\"bi bi-sort-down\"></i>");
+
+    private static string GetStatusBadge(string status) => status switch
+    {
+        "Draft" => "bg-secondary",
+        "Scheduled" => "bg-info text-dark",
+        "Sending" => "bg-warning text-dark",
+        "Completed" => "bg-success",
+        "Failed" => "bg-danger",
+        "Cancelled" => "bg-dark",
+        _ => "bg-secondary"
+    };
+
+    private async Task GoToPage(int page) { if (page < 1 || (_result is not null && page > _result.TotalPages)) return; _page = page; await LoadData(); }
+}

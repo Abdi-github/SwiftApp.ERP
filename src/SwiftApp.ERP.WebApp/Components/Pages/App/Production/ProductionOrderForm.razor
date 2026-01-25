@@ -1,0 +1,219 @@
+@page "/app/production/orders/new"
+@page "/app/production/orders/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Production.Application.DTOs
+@using SwiftApp.ERP.Modules.Production.Application.Services
+@using SwiftApp.ERP.Modules.MasterData.Application.DTOs
+@using SwiftApp.ERP.Modules.MasterData.Application.Services
+@attribute [Authorize(Policy = "PRODUCTION:CREATE")]
+@rendermode InteractiveServer
+@inject ProductionOrderService OrderService
+@inject WorkCenterService WorkCenterService
+@inject ProductService ProductService
+@inject MaterialService MaterialService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit Production Order" : "New Production Order") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-boxes me-2"></i>@(_isEdit ? "Edit Production Order" : "New Production Order")</h2>
+    <a href="/app/production/orders" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Orders
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="productionOrderForm">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Product <span class="text-danger">*</span></label>
+                    <InputSelect class="form-select" @bind-Value="_model.ProductId">
+                        <option value="">— Select Product —</option>
+                        @foreach (var p in _products)
+                        {
+                            <option value="@p.Id">@p.Sku — @p.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Work Center</label>
+                    <InputSelect class="form-select" @bind-Value="_model.WorkCenterId">
+                        <option value="">— None —</option>
+                        @foreach (var wc in _workCenters)
+                        {
+                            <option value="@wc.Id">@wc.Code — @wc.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Planned Quantity</label>
+                    <InputNumber class="form-control" @bind-Value="_model.PlannedQuantity" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Planned Start Date</label>
+                    <InputDate class="form-control" @bind-Value="_model.PlannedStartDate" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Planned End Date</label>
+                    <InputDate class="form-control" @bind-Value="_model.PlannedEndDate" />
+                </div>
+            </div>
+
+            <h5 class="mb-3 mt-2">Material Lines</h5>
+            <div class="table-responsive mb-3">
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Material</th>
+                            <th style="width:160px">Description</th>
+                            <th style="width:140px">Required Qty</th>
+                            <th style="width:60px"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < _model.Lines.Count; i++)
+                        {
+                            var idx = i;
+                            <tr>
+                                <td>
+                                    <InputSelect class="form-select form-select-sm" @bind-Value="_model.Lines[idx].MaterialId">
+                                        <option value="">— Select —</option>
+                                        @foreach (var m in _materials)
+                                        {
+                                            <option value="@m.Id">@m.Sku — @m.Name</option>
+                                        }
+                                    </InputSelect>
+                                </td>
+                                <td><InputText class="form-control form-control-sm" @bind-Value="_model.Lines[idx].Description" /></td>
+                                <td><InputNumber class="form-control form-control-sm" @bind-Value="_model.Lines[idx].RequiredQuantity" /></td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveLine(idx)">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-primary mb-3" @onclick="AddLine">
+                <i class="bi bi-plus-lg me-1"></i>Add Line
+            </button>
+
+            <div class="mb-3">
+                <label class="form-label">Notes</label>
+                <InputTextArea class="form-control" rows="2" @bind-Value="_model.Notes" />
+            </div>
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/production/orders" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private ProdOrderFormModel _model = new();
+    private List<ProductResponse> _products = [];
+    private List<WorkCenterResponse> _workCenters = [];
+    private List<MaterialResponse> _materials = [];
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var productResult = await ProductService.GetPagedAsync(1, 500);
+        _products = productResult.Items.ToList();
+        var wcResult = await WorkCenterService.GetPagedAsync(1, 500);
+        _workCenters = wcResult.Items.ToList();
+        var matResult = await MaterialService.GetPagedAsync(1, 500);
+        _materials = matResult.Items.ToList();
+
+        if (_isEdit)
+        {
+            var order = await OrderService.GetByIdAsync(Id!.Value);
+            if (order is null) { Navigation.NavigateTo("/app/production/orders"); return; }
+            _model = new ProdOrderFormModel
+            {
+                ProductId = order.ProductId.ToString(),
+                WorkCenterId = order.WorkCenterId?.ToString() ?? "",
+                PlannedQuantity = order.PlannedQuantity,
+                PlannedStartDate = order.PlannedStartDate,
+                PlannedEndDate = order.PlannedEndDate,
+                Notes = order.Notes,
+                Lines = order.Lines.Select(l => new ProdLineModel
+                {
+                    MaterialId = l.MaterialId.ToString(),
+                    Description = l.Description,
+                    RequiredQuantity = l.RequiredQuantity,
+                }).ToList(),
+            };
+        }
+    }
+
+    private void AddLine() => _model.Lines.Add(new ProdLineModel());
+    private void RemoveLine(int idx) { if (_model.Lines.Count > 0) _model.Lines.RemoveAt(idx); }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            if (!Guid.TryParse(_model.ProductId, out var productId))
+                throw new InvalidOperationException("Please select a product.");
+
+            Guid? workCenterId = Guid.TryParse(_model.WorkCenterId, out var wcId) ? wcId : null;
+
+            var lines = _model.Lines.Where(l => Guid.TryParse(l.MaterialId, out _)).Select((l, i) => new ProductionOrderLineRequest(
+                Guid.Parse(l.MaterialId), l.Description, l.RequiredQuantity, i + 1
+            )).ToList();
+
+            var request = new ProductionOrderRequest(
+                productId, workCenterId, _model.PlannedQuantity,
+                _model.PlannedStartDate, _model.PlannedEndDate, _model.Notes, lines);
+
+            if (_isEdit) await OrderService.UpdateAsync(Id!.Value, request);
+            else await OrderService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/production/orders");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class ProdOrderFormModel
+    {
+        public string ProductId { get; set; } = "";
+        public string WorkCenterId { get; set; } = "";
+        public decimal PlannedQuantity { get; set; } = 1;
+        public DateOnly PlannedStartDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+        public DateOnly PlannedEndDate { get; set; } = DateOnly.FromDateTime(DateTime.Today.AddDays(7));
+        public string? Notes { get; set; }
+        public List<ProdLineModel> Lines { get; set; } = [new()];
+    }
+
+    private class ProdLineModel
+    {
+        public string MaterialId { get; set; } = "";
+        public string? Description { get; set; }
+        public decimal RequiredQuantity { get; set; } = 1;
+    }
+}

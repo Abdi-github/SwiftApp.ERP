@@ -1,0 +1,61 @@
+@page "/login"
+@layout SwiftApp.ERP.WebApp.Components.Layout.LoginLayout
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Login — SwiftApp ERP</PageTitle>
+
+<div class="card shadow" style="width: 400px;">
+    <div class="card-body p-4">
+        <div class="text-center mb-4">
+            <h3 class="text-warning"><i class="bi bi-watch"></i> SwiftApp ERP</h3>
+            <p class="text-muted small">Swiss Watch Manufacturing &amp; Retail ERP</p>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                @_errorMessage
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
+
+        <form method="post" action="/account/login">
+            <input type="hidden" name="returnUrl" value="@_returnUrl" />
+            <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                <input id="username" name="username" type="text" class="form-control" placeholder="Enter username" required />
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input id="password" name="password" type="password" class="form-control" placeholder="Enter password" required />
+            </div>
+            <button type="submit" class="btn btn-warning w-100">
+                <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
+            </button>
+        </form>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "ReturnUrl")]
+    private string? _returnUrl { get; set; }
+
+    [SupplyParameterFromQuery(Name = "error")]
+    private string? _error { get; set; }
+
+    private string? _errorMessage;
+
+    protected override void OnInitialized()
+    {
+        if (string.IsNullOrWhiteSpace(_returnUrl))
+            _returnUrl = "/app/dashboard";
+
+        _errorMessage = _error switch
+        {
+            "invalid" => "Invalid username or password.",
+            "required" => "Username and password are required.",
+            "server" => "An error occurred during login. Please try again.",
+            _ => null
+        };
+    }
+}

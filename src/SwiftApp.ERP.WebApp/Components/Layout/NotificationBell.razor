@@ -1,0 +1,169 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@inject SwiftApp.ERP.Modules.Notification.Application.Services.NotificationService NotificationService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<div class="position-relative d-inline-block" @onfocusout="CloseDropdown">
+    <button class="btn btn-link text-muted position-relative p-1" @onclick="ToggleDropdown" @onclick:preventDefault title="Notifications">
+        <i class="bi bi-bell fs-5"></i>
+        @if (_unreadCount > 0)
+        {
+            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.65rem;">
+                @(_unreadCount > 99 ? "99+" : _unreadCount.ToString())
+            </span>
+        }
+    </button>
+
+    @if (_isOpen)
+    {
+        <div class="dropdown-menu dropdown-menu-end show shadow-lg" style="width: 380px; max-height: 480px; overflow-y: auto; right: 0; position: absolute; z-index: 1050;">
+            <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
+                <h6 class="mb-0">Notifications</h6>
+                @if (_unreadCount > 0)
+                {
+                    <button class="btn btn-link btn-sm text-primary p-0" @onclick="MarkAllRead">
+                        Mark all read
+                    </button>
+                }
+            </div>
+
+            @if (_recentNotifications.Count == 0)
+            {
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-bell-slash fs-3 d-block mb-2"></i>
+                    <small>No notifications</small>
+                </div>
+            }
+            else
+            {
+                @foreach (var n in _recentNotifications)
+                {
+                    <div class="dropdown-item px-3 py-2 border-bottom @(n.ReadAt is null ? "bg-light" : "")" style="white-space: normal; cursor: pointer;" @onclick="() => OnNotificationClick(n.Id, n.ReadAt)">
+                        <div class="d-flex align-items-start gap-2">
+                            <i class="bi @GetIcon(n.ReferenceType) text-primary mt-1"></i>
+                            <div class="flex-grow-1 overflow-hidden">
+                                <div class="fw-semibold small text-truncate">@n.Subject</div>
+                                <div class="text-muted small text-truncate">@n.Body</div>
+                                <div class="text-muted" style="font-size: 0.7rem;">@FormatTimeAgo(n.CreatedAt)</div>
+                            </div>
+                            @if (n.ReadAt is null)
+                            {
+                                <span class="rounded-circle bg-primary" style="width: 8px; height: 8px; min-width: 8px; margin-top: 6px;"></span>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+
+            <div class="text-center py-2 border-top">
+                <a href="/app/notifications" class="text-decoration-none small" @onclick="GoToInbox" @onclick:preventDefault>View all notifications</a>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private long _unreadCount;
+    private List<SwiftApp.ERP.Modules.Notification.Application.DTOs.NotificationResponse> _recentNotifications = [];
+    private bool _isOpen;
+    private Timer? _timer;
+    private Guid? _userId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is not null)
+        {
+            var state = await AuthState;
+            var sub = state.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (Guid.TryParse(sub, out var id))
+                _userId = id;
+        }
+
+        await RefreshAsync();
+
+        // Poll every 30 seconds
+        _timer = new Timer(async _ =>
+        {
+            await RefreshAsync();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (_userId is null) return;
+        try
+        {
+            _unreadCount = await NotificationService.CountUnreadAsync(_userId.Value, default);
+            _recentNotifications = await NotificationService.GetRecentByUserAsync(_userId.Value, 8, default);
+        }
+        catch
+        {
+            // Silently fail on polling errors
+        }
+    }
+
+    private void ToggleDropdown()
+    {
+        _isOpen = !_isOpen;
+    }
+
+    private void CloseDropdown()
+    {
+        _isOpen = false;
+    }
+
+    private async Task OnNotificationClick(Guid id, DateTimeOffset? readAt)
+    {
+        if (readAt is null && _userId is not null)
+        {
+            await NotificationService.MarkReadAsync(id, default);
+        }
+        _isOpen = false;
+        Navigation.NavigateTo("/app/notifications");
+    }
+
+    private void GoToInbox()
+    {
+        _isOpen = false;
+        Navigation.NavigateTo("/app/notifications");
+    }
+
+    private async Task MarkAllRead()
+    {
+        if (_userId is null) return;
+        await NotificationService.MarkAllReadAsync(_userId.Value, default);
+        await RefreshAsync();
+    }
+
+    private static string GetIcon(string? referenceType) => referenceType switch
+    {
+        "SalesOrder" => "bi-cart-check",
+        "PurchaseOrder" => "bi-truck",
+        "ProductionOrder" => "bi-gear",
+        "Inventory" or "StockMovement" => "bi-box-seam",
+        "QualityCheck" or "InspectionPlan" => "bi-clipboard-check",
+        "Employee" => "bi-person",
+        "JournalEntry" => "bi-journal-text",
+        _ => "bi-bell"
+    };
+
+    private static string FormatTimeAgo(DateTimeOffset created)
+    {
+        var diff = DateTimeOffset.UtcNow - created;
+        if (diff.TotalMinutes < 1) return "just now";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
+        return created.ToString("dd.MM.yyyy");
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

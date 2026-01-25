@@ -1,0 +1,165 @@
+@page "/app/accounting/journal"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Accounting.Application.DTOs
+@using SwiftApp.ERP.Modules.Accounting.Application.Services
+@using SwiftApp.ERP.SharedKernel.Domain
+@attribute [Authorize(Policy = "ACCOUNTING:VIEW")]
+@rendermode InteractiveServer
+@inject JournalEntryService JournalEntryService
+
+<PageTitle>Journal Entries — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-journal-text me-2"></i>Journal Entries</h2>
+    <AuthorizeView Policy="ACCOUNTING:CREATE">
+        <a href="/app/accounting/journal/new" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>New Entry
+        </a>
+    </AuthorizeView>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" placeholder="Search entries..." @bind="_search" @bind:event="oninput" @bind:after="SearchChanged" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" @bind="_statusFilter" @bind:after="OnFilterChanged">
+                    <option value="">All Status</option>
+                    <option value="posted">Posted</option>
+                    <option value="reversed">Reversed</option>
+                    <option value="draft">Draft</option>
+                </select>
+            </div>
+        </div>
+
+        @if (_loading)
+        {
+            <div class="text-center p-4"><div class="spinner-border text-primary" role="status"></div></div>
+        }
+        else if (_result is null || _result.Items.Count == 0)
+        {
+            <div class="alert alert-info">No journal entries found.</div>
+        }
+        else
+        {
+            <small class="text-muted d-block mb-2">Showing @((_page - 1) * PageSize + 1)–@(Math.Min(_page * PageSize, _result.TotalItems)) of @_result.TotalItems records</small>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th role="button" @onclick='() => ToggleSort("EntryNumber")'>Entry # @SortIcon("EntryNumber")</th>
+                            <th role="button" @onclick='() => ToggleSort("EntryDate")'>Date @SortIcon("EntryDate")</th>
+                            <th>Description</th>
+                            <th>Reference</th>
+                            <th class="text-end" role="button" @onclick='() => ToggleSort("TotalDebit")'>Debit @SortIcon("TotalDebit")</th>
+                            <th class="text-end" role="button" @onclick='() => ToggleSort("TotalCredit")'>Credit @SortIcon("TotalCredit")</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var e in _sorted)
+                        {
+                            <tr>
+                                <td><code>@e.EntryNumber</code></td>
+                                <td>@e.EntryDate.ToString("dd.MM.yyyy")</td>
+                                <td>@(e.Description ?? "—")</td>
+                                <td>@(e.Reference ?? "—")</td>
+                                <td class="text-end">CHF @e.TotalDebit.ToString("N2")</td>
+                                <td class="text-end">CHF @e.TotalCredit.ToString("N2")</td>
+                                <td>
+                                    @if (e.Posted)
+                                    {
+                                        <span class="badge bg-success">Posted</span>
+                                    }
+                                    else if (e.Reversed)
+                                    {
+                                        <span class="badge bg-warning">Reversed</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Draft</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    <AuthorizeView Policy="ACCOUNTING:EDIT">
+                                        <a href="/app/accounting/journal/edit/@e.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                                    </AuthorizeView>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (_result.TotalPages > 1)
+            {
+                <nav>
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item @(_page <= 1 ? "disabled" : "")"><button class="page-link" @onclick="() => GoToPage(_page - 1)">Previous</button></li>
+                        @for (int i = 1; i <= _result.TotalPages; i++) { var pg = i; <li class="page-item @(pg == _page ? "active" : "")"><button class="page-link" @onclick="() => GoToPage(pg)">@pg</button></li> }
+                        <li class="page-item @(_page >= _result.TotalPages ? "disabled" : "")"><button class="page-link" @onclick="() => GoToPage(_page + 1)">Next</button></li>
+                    </ul>
+                </nav>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private PagedResult<JournalEntryResponse>? _result;
+    private List<JournalEntryResponse> _sorted = [];
+    private string? _search;
+    private string _statusFilter = "";
+    private string _sortCol = "EntryNumber";
+    private bool _sortAsc = false;
+    private int _page = 1;
+    private const int PageSize = 20;
+    private bool _loading = true;
+    private System.Timers.Timer? _debounceTimer;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true; StateHasChanged();
+        _result = await JournalEntryService.GetPagedAsync(_page, PageSize, _search);
+        ApplyClientSort(); _loading = false;
+    }
+
+    private void ApplyClientSort()
+    {
+        if (_result is null) { _sorted = []; return; }
+        IEnumerable<JournalEntryResponse> items = _result.Items;
+        if (_statusFilter == "posted") items = items.Where(e => e.Posted);
+        else if (_statusFilter == "reversed") items = items.Where(e => e.Reversed);
+        else if (_statusFilter == "draft") items = items.Where(e => !e.Posted && !e.Reversed);
+        _sorted = (_sortCol switch
+        {
+            "EntryNumber" => _sortAsc ? items.OrderBy(e => e.EntryNumber) : items.OrderByDescending(e => e.EntryNumber),
+            "EntryDate" => _sortAsc ? items.OrderBy(e => e.EntryDate) : items.OrderByDescending(e => e.EntryDate),
+            "TotalDebit" => _sortAsc ? items.OrderBy(e => e.TotalDebit) : items.OrderByDescending(e => e.TotalDebit),
+            "TotalCredit" => _sortAsc ? items.OrderBy(e => e.TotalCredit) : items.OrderByDescending(e => e.TotalCredit),
+            _ => items
+        }).ToList();
+    }
+
+    private void ToggleSort(string col) { if (_sortCol == col) _sortAsc = !_sortAsc; else { _sortCol = col; _sortAsc = true; } ApplyClientSort(); }
+    private MarkupString SortIcon(string col) => new(_sortCol != col ? "<i class=\"bi bi-arrow-down-up text-muted small\"></i>" : _sortAsc ? "<i class=\"bi bi-sort-up\"></i>" : "<i class=\"bi bi-sort-down\"></i>");
+    private async Task OnFilterChanged() { _page = 1; await LoadData(); }
+
+    private void SearchChanged()
+    {
+        _debounceTimer?.Stop(); _debounceTimer?.Dispose();
+        _debounceTimer = new System.Timers.Timer(300);
+        _debounceTimer.Elapsed += async (_, _) => { _debounceTimer?.Stop(); _page = 1; await InvokeAsync(async () => { await LoadData(); StateHasChanged(); }); };
+        _debounceTimer.AutoReset = false; _debounceTimer.Start();
+    }
+
+    private async Task GoToPage(int page) { if (page < 1 || (_result is not null && page > _result.TotalPages)) return; _page = page; await LoadData(); }
+}

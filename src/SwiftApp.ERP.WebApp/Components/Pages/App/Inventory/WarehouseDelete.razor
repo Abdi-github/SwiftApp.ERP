@@ -1,0 +1,68 @@
+@page "/app/inventory/warehouses/delete/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Inventory.Application.DTOs
+@using SwiftApp.ERP.Modules.Inventory.Application.Services
+@attribute [Authorize(Policy = "INVENTORY:DELETE")]
+@rendermode InteractiveServer
+@inject WarehouseService WarehouseService
+@inject NavigationManager Navigation
+
+<PageTitle>Delete Warehouse — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-trash me-2"></i>Delete Warehouse</h2>
+    <a href="/app/inventory/warehouses" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Warehouses
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-1"></i>@_error</div>
+}
+
+@if (_warehouse is not null)
+{
+    <div class="card border-danger">
+        <div class="card-body">
+            <div class="alert alert-warning mb-3">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                Are you sure you want to delete warehouse <strong>@_warehouse.Name</strong> (@_warehouse.Code)?
+            </div>
+            <dl class="row mb-0">
+                <dt class="col-sm-3">Code</dt><dd class="col-sm-9"><code>@_warehouse.Code</code></dd>
+                <dt class="col-sm-3">Name</dt><dd class="col-sm-9">@_warehouse.Name</dd>
+                <dt class="col-sm-3">Address</dt><dd class="col-sm-9">@(_warehouse.Address ?? "—")</dd>
+            </dl>
+            <hr />
+            <div class="d-flex gap-2">
+                <button class="btn btn-danger" @onclick="ConfirmDelete" disabled="@_deleting">
+                    @if (_deleting) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-trash me-1"></i>Delete
+                </button>
+                <a href="/app/inventory/warehouses" class="btn btn-secondary">Cancel</a>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private WarehouseResponse? _warehouse;
+    private string? _error;
+    private bool _deleting;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _warehouse = await WarehouseService.GetByIdAsync(Id);
+        if (_warehouse is null) Navigation.NavigateTo("/app/inventory/warehouses");
+    }
+
+    private async Task ConfirmDelete()
+    {
+        _deleting = true; _error = null;
+        try { await WarehouseService.DeleteAsync(Id); Navigation.NavigateTo("/app/inventory/warehouses"); }
+        catch (Exception ex) { _error = ex.Message; _deleting = false; }
+    }
+}

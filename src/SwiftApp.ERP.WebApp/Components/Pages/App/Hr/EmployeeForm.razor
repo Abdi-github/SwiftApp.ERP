@@ -1,0 +1,198 @@
+@page "/app/hr/employees/new"
+@page "/app/hr/employees/edit/{Id:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.Hr.Application.DTOs
+@using SwiftApp.ERP.Modules.Hr.Application.Services
+@attribute [Authorize(Policy = "HR:CREATE")]
+@rendermode InteractiveServer
+@inject EmployeeService EmployeeService
+@inject DepartmentService DepartmentService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit Employee" : "New Employee") — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-person-plus me-2"></i>@(_isEdit ? "Edit Employee" : "New Employee")</h2>
+    <a href="/app/hr/employees" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Employees
+    </a>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        <i class="bi bi-exclamation-triangle me-1"></i>@_error
+        <button type="button" class="btn-close" @onclick="() => _error = null"></button>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="HandleSubmit" FormName="employeeForm">
+            <h5 class="mb-3">Personal Information</h5>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">First Name <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.FirstName" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Last Name <span class="text-danger">*</span></label>
+                    <InputText class="form-control" @bind-Value="_model.LastName" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Email</label>
+                    <InputText class="form-control" type="email" @bind-Value="_model.Email" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Phone</label>
+                    <InputText class="form-control" @bind-Value="_model.Phone" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Department <span class="text-danger">*</span></label>
+                    <InputSelect class="form-select" @bind-Value="_model.DepartmentId">
+                        <option value="">— Select Department —</option>
+                        @foreach (var d in _departments)
+                        {
+                            <option value="@d.Id">@d.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Position</label>
+                    <InputText class="form-control" @bind-Value="_model.Position" />
+                </div>
+            </div>
+
+            <h5 class="mt-4 mb-3">Employment Details</h5>
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Hire Date <span class="text-danger">*</span></label>
+                    <InputDate class="form-control" @bind-Value="_model.HireDate" />
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Termination Date</label>
+                    <InputDate class="form-control" @bind-Value="_model.TerminationDate" />
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Salary (CHF)</label>
+                    <InputNumber class="form-control" @bind-Value="_model.Salary" />
+                </div>
+                <div class="col-md-3 mb-3 d-flex align-items-end">
+                    <div class="form-check">
+                        <InputCheckbox class="form-check-input" @bind-Value="_model.Active" />
+                        <label class="form-check-label">Active</label>
+                    </div>
+                </div>
+            </div>
+
+            <h5 class="mt-4 mb-3">Address</h5>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Street</label>
+                    <InputText class="form-control" @bind-Value="_model.Street" />
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Postal Code</label>
+                    <InputText class="form-control" @bind-Value="_model.PostalCode" />
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">City</label>
+                    <InputText class="form-control" @bind-Value="_model.City" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Canton</label>
+                    <InputText class="form-control" @bind-Value="_model.Canton" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Country</label>
+                    <InputText class="form-control" @bind-Value="_model.Country" />
+                </div>
+            </div>
+
+            <hr />
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@_saving">
+                    @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    <i class="bi bi-check-lg me-1"></i>@(_isEdit ? "Update" : "Create")
+                </button>
+                <a href="/app/hr/employees" class="btn btn-secondary">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private EmployeeFormModel _model = new();
+    private IReadOnlyList<DepartmentResponse> _departments = [];
+    private string? _error;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _departments = await DepartmentService.GetAllActiveAsync();
+
+        if (_isEdit)
+        {
+            var emp = await EmployeeService.GetByIdAsync(Id!.Value);
+            if (emp is null) { Navigation.NavigateTo("/app/hr/employees"); return; }
+            _model = new EmployeeFormModel
+            {
+                FirstName = emp.FirstName, LastName = emp.LastName, Email = emp.Email, Phone = emp.Phone,
+                DepartmentId = emp.DepartmentId.ToString(), Position = emp.Position,
+                HireDate = emp.HireDate, TerminationDate = emp.TerminationDate,
+                Salary = emp.Salary, Active = emp.Active,
+                Street = emp.Street, City = emp.City, PostalCode = emp.PostalCode,
+                Canton = emp.Canton, Country = emp.Country,
+            };
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true; _error = null;
+        try
+        {
+            if (!Guid.TryParse(_model.DepartmentId, out var deptId))
+            { _error = "Please select a department."; return; }
+
+            var request = new EmployeeRequest(
+                _model.FirstName, _model.LastName, _model.Email, _model.Phone,
+                deptId, _model.Position, _model.HireDate, _model.TerminationDate,
+                _model.Salary, _model.Street, _model.City, _model.PostalCode,
+                _model.Canton, _model.Country, _model.Active);
+
+            if (_isEdit) await EmployeeService.UpdateAsync(Id!.Value, request);
+            else await EmployeeService.CreateAsync(request);
+
+            Navigation.NavigateTo("/app/hr/employees");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private class EmployeeFormModel
+    {
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
+        public string? Email { get; set; }
+        public string? Phone { get; set; }
+        public string DepartmentId { get; set; } = "";
+        public string? Position { get; set; }
+        public DateOnly HireDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+        public DateOnly? TerminationDate { get; set; }
+        public decimal Salary { get; set; }
+        public bool Active { get; set; } = true;
+        public string? Street { get; set; }
+        public string? City { get; set; }
+        public string? PostalCode { get; set; }
+        public string? Canton { get; set; }
+        public string? Country { get; set; } = "CH";
+    }
+}

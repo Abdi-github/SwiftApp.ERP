@@ -1,0 +1,183 @@
+@page "/app/masterdata/categories"
+@using Microsoft.AspNetCore.Authorization
+@using SwiftApp.ERP.Modules.MasterData.Application.DTOs
+@using SwiftApp.ERP.Modules.MasterData.Application.Services
+@attribute [Authorize(Policy = "MASTERDATA:VIEW")]
+@rendermode InteractiveServer
+@inject CategoryService CategoryService
+
+<PageTitle>Categories — SwiftApp ERP</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-tags me-2"></i>Categories</h2>
+    <AuthorizeView Policy="MASTERDATA:CREATE">
+        <a href="/app/masterdata/categories/new" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>New Category
+        </a>
+    </AuthorizeView>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" placeholder="Search categories..." @bind="_search" @bind:event="oninput" @bind:after="SearchChanged" />
+                </div>
+            </div>
+        </div>
+
+        @if (_loading)
+        {
+            <div class="text-center p-4"><div class="spinner-border text-primary" role="status"></div></div>
+        }
+        else if (_filtered is null || _filtered.Count == 0)
+        {
+            <div class="alert alert-info">No categories found.</div>
+        }
+        else
+        {
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <small class="text-muted">Showing @((_page - 1) * PageSize + 1) to @(Math.Min(_page * PageSize, _filtered.Count)) of @_filtered.Count records</small>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th role="button" @onclick='() => SortBy("Name")'>Name @SortIndicator("Name")</th>
+                            <th>Description</th>
+                            <th role="button" @onclick='() => SortBy("ParentCategoryName")'>Parent Category @SortIndicator("ParentCategoryName")</th>
+                            <th role="button" @onclick='() => SortBy("CreatedAt")'>Created @SortIndicator("CreatedAt")</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in _pagedItems)
+                        {
+                            <tr>
+                                <td>@c.Name</td>
+                                <td>@(c.Description ?? "—")</td>
+                                <td>@(c.ParentCategoryName ?? "—")</td>
+                                <td>@c.CreatedAt.ToString("dd.MM.yyyy")</td>
+                                <td class="text-end">
+                                    <AuthorizeView Policy="MASTERDATA:EDIT">
+                                        <a href="/app/masterdata/categories/edit/@c.Id" class="btn btn-sm btn-outline-primary me-1"><i class="bi bi-pencil"></i></a>
+                                    </AuthorizeView>
+                                    <AuthorizeView Policy="MASTERDATA:DELETE">
+                                        <a href="/app/masterdata/categories/delete/@c.Id" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></a>
+                                    </AuthorizeView>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @* Pagination *@
+            @if (_totalPages > 1)
+            {
+                <nav>
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item @(_page <= 1 ? "disabled" : "")">
+                            <button class="page-link" @onclick="() => GoToPage(_page - 1)">Previous</button>
+                        </li>
+                        @for (int i = 1; i <= _totalPages; i++)
+                        {
+                            var pg = i;
+                            <li class="page-item @(pg == _page ? "active" : "")">
+                                <button class="page-link" @onclick="() => GoToPage(pg)">@pg</button>
+                            </li>
+                        }
+                        <li class="page-item @(_page >= _totalPages ? "disabled" : "")">
+                            <button class="page-link" @onclick="() => GoToPage(_page + 1)">Next</button>
+                        </li>
+                    </ul>
+                </nav>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private List<CategoryResponse>? _allCategories;
+    private List<CategoryResponse>? _filtered;
+    private List<CategoryResponse> _pagedItems = [];
+    private string? _search;
+    private string _sortColumn = "Name";
+    private bool _sortAsc = true;
+    private int _page = 1;
+    private int _totalPages = 1;
+    private const int PageSize = 20;
+    private bool _loading = true;
+    private System.Timers.Timer? _debounceTimer;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        StateHasChanged();
+        _allCategories = await CategoryService.GetAllAsync();
+        ApplyFilter();
+        _loading = false;
+    }
+
+    private void ApplyFilter()
+    {
+        var items = _allCategories?
+            .Where(c => string.IsNullOrWhiteSpace(_search)
+                || c.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                || (c.Description?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (c.ParentCategoryName?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false))
+            ?? Enumerable.Empty<CategoryResponse>();
+
+        _filtered = ApplySort(items).ToList();
+        _totalPages = Math.Max(1, (int)Math.Ceiling(_filtered.Count / (double)PageSize));
+        if (_page > _totalPages) _page = _totalPages;
+        _pagedItems = _filtered.Skip((_page - 1) * PageSize).Take(PageSize).ToList();
+    }
+
+    private IEnumerable<CategoryResponse> ApplySort(IEnumerable<CategoryResponse> items) => _sortColumn switch
+    {
+        "Name" => _sortAsc ? items.OrderBy(c => c.Name) : items.OrderByDescending(c => c.Name),
+        "ParentCategoryName" => _sortAsc ? items.OrderBy(c => c.ParentCategoryName) : items.OrderByDescending(c => c.ParentCategoryName),
+        "CreatedAt" => _sortAsc ? items.OrderBy(c => c.CreatedAt) : items.OrderByDescending(c => c.CreatedAt),
+        _ => items
+    };
+
+    private void SortBy(string column)
+    {
+        if (_sortColumn == column) _sortAsc = !_sortAsc;
+        else { _sortColumn = column; _sortAsc = true; }
+        ApplyFilter();
+    }
+
+    private MarkupString SortIndicator(string column)
+    {
+        if (_sortColumn != column) return new("<i class=\"bi bi-arrow-down-up text-muted small\"></i>");
+        return _sortAsc ? new("<i class=\"bi bi-sort-up\"></i>") : new("<i class=\"bi bi-sort-down\"></i>");
+    }
+
+    private void SearchChanged()
+    {
+        _debounceTimer?.Stop();
+        _debounceTimer?.Dispose();
+        _debounceTimer = new System.Timers.Timer(300);
+        _debounceTimer.Elapsed += async (_, _) =>
+        {
+            _debounceTimer?.Stop();
+            _page = 1;
+            await InvokeAsync(() => { ApplyFilter(); StateHasChanged(); });
+        };
+        _debounceTimer.AutoReset = false;
+        _debounceTimer.Start();
+    }
+
+    private void GoToPage(int page)
+    {
+        if (page < 1 || page > _totalPages) return;
+        _page = page;
+        ApplyFilter();
+    }
+}
