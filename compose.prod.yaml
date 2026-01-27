@@ -1,0 +1,160 @@
+# ──────────────────────────────────────────────────────────
+# SwiftApp ERP — Production Docker Compose
+# ──────────────────────────────────────────────────────────
+# Usage:
+#   docker compose -f compose.prod.yaml --env-file .env.prod up -d --build
+#   docker compose -f compose.prod.yaml --env-file .env.prod down
+#   docker compose -f compose.prod.yaml --env-file .env.prod logs -f app
+
+services:
+
+  # ── ASP.NET Core WebApi ─────────────────────────────────
+  webapi:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+      args:
+        PROJECT: SwiftApp.ERP.WebApi
+    container_name: swiftapp-erp-webapi
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-swiftapp_erp};Username=${POSTGRES_USER:-erp_admin};Password=${POSTGRES_PASSWORD}"
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__ExpirationMinutes: ${JWT_EXPIRATION_MINUTES:-1440}
+      Email__SmtpHost: ${MAIL_HOST}
+      Email__SmtpPort: ${MAIL_PORT:-587}
+      Email__SmtpUsername: ${MAIL_USERNAME:-}
+      Email__SmtpPassword: ${MAIL_PASSWORD:-}
+      Email__FromAddress: ${MAIL_FROM:-noreply@swiftapp.ch}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+      - frontend
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1024M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+    restart: unless-stopped
+
+  # ── ASP.NET Core WebApp (Blazor SSR) ────────────────────
+  webapp:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+      args:
+        PROJECT: SwiftApp.ERP.WebApp
+    container_name: swiftapp-erp-webapp
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-swiftapp_erp};Username=${POSTGRES_USER:-erp_admin};Password=${POSTGRES_PASSWORD}"
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__ExpirationMinutes: ${JWT_EXPIRATION_MINUTES:-1440}
+      Email__SmtpHost: ${MAIL_HOST}
+      Email__SmtpPort: ${MAIL_PORT:-587}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+      - frontend
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1024M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+    restart: unless-stopped
+
+  # ── PostgreSQL 17 (Alpine — smaller image) ──────────────
+  postgres:
+    image: postgres:17-alpine
+    container_name: swiftapp-erp-db-prod
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-swiftapp_erp}
+      POSTGRES_USER: ${POSTGRES_USER:-erp_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-erp_admin} -d ${POSTGRES_DB:-swiftapp_erp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    restart: unless-stopped
+
+  # ── Nginx Reverse Proxy ─────────────────────────────────
+  nginx:
+    build:
+      context: ./docker/nginx
+      dockerfile: Dockerfile
+    container_name: swiftapp-erp-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      webapi:
+        condition: service_healthy
+      webapp:
+        condition: service_healthy
+    networks:
+      - frontend
+    volumes:
+      - nginx_logs:/var/log/nginx
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    restart: unless-stopped
+
+networks:
+  backend:
+    driver: bridge
+    name: swiftapp-backend
+  frontend:
+    driver: bridge
+    name: swiftapp-frontend
+
+volumes:
+  pgdata_prod:
+    driver: local
+    name: swiftapp-erp-pgdata-prod
+  nginx_logs:
+    driver: local
+    name: swiftapp-erp-nginx-logs

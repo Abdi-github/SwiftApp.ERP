@@ -1,0 +1,41 @@
+# ════════════════════════════════════════════════════════════
+# SwiftApp ERP — Development Dockerfile (Hot-Reload)
+# ════════════════════════════════════════════════════════════
+FROM mcr.microsoft.com/dotnet/sdk:10.0
+LABEL maintainer="SwiftApp ERP <dev@swiftapp.ch>"
+ARG PROJECT=SwiftApp.ERP.WebApi
+ENV PROJECT_NAME=${PROJECT}
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl tzdata \
+    && ln -sf /usr/share/zoneinfo/Europe/Zurich /etc/localtime \
+    && echo "Europe/Zurich" > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy project files for restore + pre-build
+COPY Directory.Build.props Directory.Packages.props ./
+COPY src/ ./src/
+
+# Restore NuGet packages (cached in Docker layer + named volume)
+RUN dotnet restore "src/${PROJECT}/${PROJECT}.csproj"
+
+# Pre-build so container startup only needs incremental compilation
+RUN dotnet build "src/${PROJECT}/${PROJECT}.csproj" -c Debug --no-restore
+
+EXPOSE 8080
+
+ENV ASPNETCORE_URLS="http://+:8080" \
+    ASPNETCORE_ENVIRONMENT=Development \
+    DOTNET_USE_POLLING_FILE_WATCHER=true \
+    DOTNET_RUNNING_IN_CONTAINER=true \
+    TZ=Europe/Zurich
+
+# Reduced start-period: pre-built app starts much faster
+HEALTHCHECK --interval=15s --timeout=10s --start-period=45s --retries=5 \
+    CMD curl -sf http://localhost:8080/health || exit 1
+
+# No duplicate restore — just run with watch for file-change detection
+# Shell form required for env variable expansion
+ENTRYPOINT dotnet watch run --project "src/${PROJECT_NAME}/${PROJECT_NAME}.csproj" --no-hot-reload

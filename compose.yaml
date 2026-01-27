@@ -1,0 +1,200 @@
+# ──────────────────────────────────────────────────────────
+# SwiftApp ERP — Development Docker Compose
+# ──────────────────────────────────────────────────────────
+# Usage:
+#   docker compose up -d                # Start ALL services (DB, pgAdmin, Mailpit, Seq, App)
+#   docker compose up -d --build        # Rebuild app image first, then start all
+#   docker compose down                 # Stop all services
+#   docker compose down -v              # Stop + destroy volumes (reset DB)
+#   docker compose logs -f app          # Tail app logs (hot-reload output)
+#
+# Local-only mode (run app on host instead of Docker):
+#   docker compose up -d postgres pgadmin mailpit seq   # Start infra only
+#   dotnet watch run --project src/SwiftApp.ERP.WebApp  # Run app locally
+# ──────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL 17 ───────────────────────────────────────
+  postgres:
+    image: postgres:17
+    container_name: swiftapp-erp-db
+    mem_limit: 256m
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-swiftapp_erp}
+      POSTGRES_USER: ${POSTGRES_USER:-erp_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-erp_secret}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-erp_admin} -d ${POSTGRES_DB:-swiftapp_erp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── pgAdmin 4 (Database Admin UI) ──────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: swiftapp-erp-pgadmin
+    mem_limit: 256m
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@swiftapp.ch}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_LISTEN_PORT: 5050
+    ports:
+      - "5050:5050"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+      - ./docker/pgadmin/pgpass:/pgadmin4/pgpass:ro
+    restart: unless-stopped
+
+  # ── Mailpit (Local Email Testing) ──────────────────────
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: swiftapp-erp-mailpit
+    ports:
+      - "1028:1025"     # SMTP: app connects to localhost:1028
+      - "8028:8025"     # Web UI: http://localhost:8028
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+      MP_UI_AUTH_FILE: ""
+      MP_MAX_MESSAGES: 500
+      MP_DATABASE: /data/mailpit.db
+    volumes:
+      - mailpit_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8025/api/v1/info"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  # ── Seq (Structured Log Viewer for Serilog) ────────────
+  seq:
+    image: datalust/seq:latest
+    container_name: swiftapp-erp-seq
+    mem_limit: 256m
+    environment:
+      ACCEPT_EULA: "Y"
+      SEQ_FIRSTRUN_ADMINPASSWORD: "${SEQ_ADMIN_PASSWORD:-SwiftApp2026!}"
+    ports:
+      - "5341:5341"     # Ingestion: Serilog sends logs here
+      - "8081:80"       # Web UI: http://localhost:8081
+    volumes:
+      - seq_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── Redis 7 (Caching, Pub/Sub, Background Jobs) ────────
+  redis:
+    image: redis:7-alpine
+    container_name: swiftapp-erp-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  # ── ASP.NET Core WebApi (Dev with Hot-Reload) ──────────
+  webapi:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile.dev
+      args:
+        PROJECT: SwiftApp.ERP.WebApi
+    container_name: swiftapp-erp-webapi
+    mem_limit: 512m
+    ports:
+      - "5000:8080"
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - nuget_cache:/root/.nuget
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-swiftapp_erp};Username=${POSTGRES_USER:-erp_admin};Password=${POSTGRES_PASSWORD:-erp_secret}"
+      Email__SmtpHost: mailpit
+      Email__SmtpPort: 1025
+      Email__FromAddress: noreply@swiftapp.ch
+      Email__FromName: SwiftApp ERP
+      Serilog__WriteTo__1__Args__serverUrl: "http://seq:5341"
+      Jwt__SecretKey: ${JWT_SECRET:-DEV-ONLY-super-secret-key-change-in-production-at-least-256-bits!!}
+      Jwt__Issuer: swiftapp-erp-api
+      Jwt__Audience: swiftapp-erp-client
+      Jwt__ExpirationMinutes: ${JWT_EXPIRATION_MINUTES:-60}
+      ConnectionStrings__Redis: "redis:6379,abortConnect=false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── ASP.NET Core WebApp / Blazor SSR (Dev with Hot-Reload)
+  webapp:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile.dev
+      args:
+        PROJECT: SwiftApp.ERP.WebApp
+    container_name: swiftapp-erp-webapp
+    mem_limit: 512m
+    ports:
+      - "5001:8080"
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - nuget_cache:/root/.nuget
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-swiftapp_erp};Username=${POSTGRES_USER:-erp_admin};Password=${POSTGRES_PASSWORD:-erp_secret}"
+      Email__SmtpHost: mailpit
+      Email__SmtpPort: 1025
+      Email__FromAddress: noreply@swiftapp.ch
+      Email__FromName: SwiftApp ERP
+      Serilog__WriteTo__1__Args__serverUrl: "http://seq:5341"
+      ConnectionStrings__Redis: "redis:6379,abortConnect=false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+    driver: local
+  pgadmin_data:
+    driver: local
+  mailpit_data:
+    driver: local
+  seq_data:
+    driver: local
+  redis_data:
+    driver: local
+  nuget_cache:
+    driver: local
