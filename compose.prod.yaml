@@ -20,7 +20,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: "http://+:8080"
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-swiftapp_erp};Username=${POSTGRES_USER:-erp_admin};Password=${POSTGRES_PASSWORD}"
-      Jwt__Secret: ${JWT_SECRET}
+      Jwt__SecretKey: ${JWT_SECRET}
       Jwt__ExpirationMinutes: ${JWT_EXPIRATION_MINUTES:-1440}
       Email__SmtpHost: ${MAIL_HOST}
       Email__SmtpPort: ${MAIL_PORT:-587}
@@ -34,7 +34,7 @@ services:
       - backend
       - frontend
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
       interval: 30s
       timeout: 10s
       start_period: 60s
@@ -61,7 +61,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: "http://+:8080"
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-swiftapp_erp};Username=${POSTGRES_USER:-erp_admin};Password=${POSTGRES_PASSWORD}"
-      Jwt__Secret: ${JWT_SECRET}
+      Jwt__SecretKey: ${JWT_SECRET}
       Jwt__ExpirationMinutes: ${JWT_EXPIRATION_MINUTES:-1440}
       Email__SmtpHost: ${MAIL_HOST}
       Email__SmtpPort: ${MAIL_PORT:-587}
@@ -72,7 +72,7 @@ services:
       - backend
       - frontend
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
       interval: 30s
       timeout: 10s
       start_period: 60s
