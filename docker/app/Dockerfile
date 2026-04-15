@@ -56,9 +56,13 @@ USER appuser:appgroup
 
 EXPOSE 8080
 
-ENV ASPNETCORE_URLS="http://+:8080" \
+ARG PROJECT=SwiftApp.ERP.WebApi
+ENV APP_DLL="${PROJECT}.dll" \
+    ASPNETCORE_URLS="http://+:8080" \
     DOTNET_RUNNING_IN_CONTAINER=true \
     TZ=Europe/Zurich
+
+ENTRYPOINT ["sh", "-c", "exec dotnet \"$APP_DLL\""]
 
 ARG PROJECT=SwiftApp.ERP.WebApi
 ENV APP_DLL="${PROJECT}.dll"
