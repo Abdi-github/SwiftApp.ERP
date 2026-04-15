@@ -16,6 +16,9 @@ services:
       args:
         PROJECT: SwiftApp.ERP.WebApi
     container_name: swiftapp-erp-webapi
+    labels:
+      - "sablier.enable=true"
+      - "sablier.group=erp-dotnet"
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: "http://+:8080"
@@ -57,6 +60,9 @@ services:
       args:
         PROJECT: SwiftApp.ERP.WebApp
     container_name: swiftapp-erp-webapp
+    labels:
+      - "sablier.enable=true"
+      - "sablier.group=erp-dotnet"
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: "http://+:8080"
@@ -91,6 +97,9 @@ services:
   postgres:
     image: postgres:17-alpine
     container_name: swiftapp-erp-db-prod
+    labels:
+      - "sablier.enable=true"
+      - "sablier.group=erp-dotnet"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-swiftapp_erp}
       POSTGRES_USER: ${POSTGRES_USER:-erp_admin}
@@ -133,10 +142,14 @@ services:
       - nginx_logs:/var/log/nginx
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.allownonrunning=true"
       - "traefik.http.routers.swiftapp-erp.rule=Host(`erp-dotnet.swiftapp.ch`)"
       - "traefik.http.routers.swiftapp-erp.entrypoints=websecure"
       - "traefik.http.routers.swiftapp-erp.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.swiftapp-erp.middlewares=sablier-erp-dotnet@file"
       - "traefik.http.services.swiftapp-erp.loadbalancer.server.port=80"
+      - "sablier.enable=true"
+      - "sablier.group=erp-dotnet"
     deploy:
       resources:
         limits:
